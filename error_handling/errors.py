@@ -37,3 +37,7 @@ class InsufficientDataError(AppError):
 class LockoutError(AppError):
     def __init__(self, message="Account temporarily locked", details=None):
         super().__init__(message, 429, "lockout", details)
+
+class InternalServerError(AppError):
+    def __init__(self, message="Internal server error", details=None):
+        super().__init__(message, 500, "internal_server_error", details)

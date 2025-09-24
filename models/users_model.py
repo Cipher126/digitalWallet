@@ -24,7 +24,7 @@ def _insert_wallet(cursor, user_id):
     return wallet_id, account_number
 
 
-def _generate_tokens(user_id, role):
+def generate_tokens(user_id, role):
     """Generate and persist access + refresh tokens."""
     access_token = create_access_token(user_id, role)
     refresh_token = create_refresh_token(user_id)
@@ -52,7 +52,10 @@ def create_user(email, username, full_name, phone=None, password=None,
                     cursor.execute("""
                         INSERT INTO users (user_id, username, full_name, email, phone, password)
                         VALUES (%s, %s, %s, %s, %s, %s)
+                        RETURNING role
                     """, (user_id, username, full_name, email, phone, hashed_pw))
+
+                    role = cursor.fetchone()[0]
 
                     insert_audit_log(user_id, "USER_CREATED", {"method": "email"})
 
@@ -61,8 +64,11 @@ def create_user(email, username, full_name, phone=None, password=None,
                         INSERT INTO users (user_id, username, full_name, email,
                                            oauth_provider, oauth_id, is_oauth_only)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        RETURNING role
                     """, (user_id, username, full_name, email,
                           oauth_provider, oauth_id, is_oauth_only))
+
+                    role = cursor.fetchone()[0]
 
                     insert_audit_log(user_id, "USER_CREATED", {"method": "OAUTH"})
 
@@ -70,11 +76,16 @@ def create_user(email, username, full_name, phone=None, password=None,
                     raise InsufficientDataError("Not enough signup data provided")
 
                 wallet_id, account_number = _insert_wallet(cursor, user_id)
+                access, refresh = generate_tokens(user_id, role)
 
         return {
             "user_id": user_id,
             "wallet_id": wallet_id,
-            "account_number": account_number
+            "account_number": account_number,
+            "tokens": {
+                "refresh_token": refresh,
+                "access_token": access
+            }
         }
 
     except Exception as e:
@@ -101,6 +112,8 @@ def search_user_with_params(username=None, email=None, user_id=None):
                 "phone": user[4],
                 "password": user[5],
                 "is_active": user[11],
+                "otp_secret": user[9],
+                "two_fa_enabled": user[10],
                 "role": user[13]
             }
         raise NotFoundError("User not found")
@@ -115,7 +128,7 @@ def authenticate_user_with_username(username, password):
     user = search_user_with_params(username=username)
     try:
         if verify_password(password, user["password"]) and user["is_active"]:
-            access_token, refresh_token = _generate_tokens(user["user_id"], user["role"])
+            access_token, refresh_token = generate_tokens(user["user_id"], user["role"])
             return {
                 "username": user["username"],
                 "access_token": access_token,
@@ -132,7 +145,7 @@ def authenticate_user_with_email(email, password):
     user = search_user_with_params(email=email)
     try:
         if verify_password(password, user["password"]) and user["is_active"]:
-            access_token, refresh_token = _generate_tokens(user["user_id"], user["role"])
+            access_token, refresh_token = generate_tokens(user["user_id"], user["role"])
             return {
                 "username": user["username"],
                 "access_token": access_token,
@@ -178,7 +191,7 @@ def oauth_login(provider, oauth_id, email, full_name):
         user = get_user_by_oauth(provider, oauth_id)
 
         if user and user["is_active"]:
-            access_token, refresh_token = _generate_tokens(user["user_id"], user["role"])
+            access_token, refresh_token = generate_tokens(user["user_id"], user["role"])
             return {"username": user["username"], "access_token": access_token, "refresh_token": refresh_token}
 
         username = f"wallet_user:{generate_id(20, '_')}"
@@ -186,7 +199,7 @@ def oauth_login(provider, oauth_id, email, full_name):
                                oauth_provider=provider, oauth_id=oauth_id,
                                is_oauth_only=True)
 
-        access_token, refresh_token = _generate_tokens(new_user["user_id"], "user")  # default role
+        access_token, refresh_token = generate_tokens(new_user["user_id"], "user")  # default role
 
         return {
             "username": username,
@@ -228,13 +241,13 @@ def verify_user(user_id, is_verified: bool):
         raise
 
 
-def update_user_password(user_id, password):
+def update_user_password(email, password):
     hashed_pw = hash_password(password)
     try:
         with conn:
             with conn.cursor() as cursor:
-                cursor.execute("UPDATE users SET password = %s WHERE user_id = %s",
-                               (hashed_pw, user_id))
+                cursor.execute("UPDATE users SET password = %s WHERE email = %s",
+                               (hashed_pw, email))
 
         return True
     except Exception as e:
@@ -255,7 +268,7 @@ def update_user_info(username, fields_to_edit):
             with conn.cursor() as cursor:
                 cursor.execute(f"""
                     UPDATE users SET {set_clause} WHERE username = %s
-                """, username)
+                """, values)
 
         return True
 

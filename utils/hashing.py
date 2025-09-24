@@ -36,6 +36,7 @@ def generate_reference(prefix="WLT"):
     return f"{prefix}-{today}-{ref:06d}"
 
 
-print(generate_reference())
-print(generate_reference())
-print(generate_reference())
+def generate_username():
+    username = f"user:{generate_id(18, "_")}"
+
+    return username
