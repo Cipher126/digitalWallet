@@ -8,10 +8,9 @@ from models.webhook_logs_model import insert_webhook_log
 from utils.hashing import generate_reference, generate_id
 
 
-def create_transaction(wallet_id, user_id, txn_type, amount, to_account=None, from_account=None, reference=None, description=""):
+def create_transaction(txn_id, wallet_id, user_id, txn_type, amount, to_account=None, from_account=None, reference=None, description=""):
     """Insert a transaction record"""
     try:
-        txn_id = generate_id(15)
         if not reference:
             reference = generate_reference()
 
@@ -38,7 +37,7 @@ def create_transaction(wallet_id, user_id, txn_type, amount, to_account=None, fr
             "description": description
         })
 
-        return txn_id
+        return True
     except Exception as e:
         logger.error(f"Error creating transaction: {e}", exc_info=True)
         raise

@@ -4,7 +4,7 @@ from error_handling.errors import ConflictError, InsufficientDataError, Internal
 from models.users_model import (create_user, get_user_by_oauth, oauth_login,
                                 authenticate_user_with_email, authenticate_user_with_username,
                                 search_user_with_params, verify_user, update_user_info, update_user_password,
-                                update_user_active_status, enable_2fa, delete_account, generate_tokens)
+                                update_user_active_status, enable_2fa, delete_account)
 
 from services.audit_services import log_action
 from utils.hashing import generate_username
@@ -56,10 +56,10 @@ def oauth_user_login(provider, oauth_id, email, full_name=None, phone=None, otp=
                 if not otp:
                     raise ValidationError("2FA code required")
                 if not verify_totp(user["totp_secret"], otp):
-                    register_failed_login(user["user_id"])
+                    register_failed_login(identifier=user["user_id"], scope="user")
                     raise ValidationError("invalid 2FA code")
 
-            clear_failed_attempts(user["user_id"])
+            clear_failed_attempts(identifier=user["user_id"], scope="user")
             log_action(user_id=user["user_id"], action="oauth login", metadata={"provider":provider})
             return {
                 "success": True,
@@ -107,13 +107,13 @@ def user_login_email(data):
         if not user:
             raise NotFoundError("user does not exist")
 
-        if is_user_locked_out(user_id=user["user_id"]):
+        if is_user_locked_out(identifier=user["user_id"], scope="user"):
             raise LockoutError("account locked due to too many failed attempts, try later")
 
         verified = authenticate_user_with_email(email, password)
 
         if not verified:
-            register_failed_login(user_id=user["user_id"])
+            register_failed_login(identifier=user["user_id"], scope="user")
             log_action(user_id=user["user_id"], action="failed login attempt", metadata={"email": email})
             raise ValidationError("incorrect password or email address")
 
@@ -123,10 +123,10 @@ def user_login_email(data):
                 raise InsufficientDataError
 
             if not verify_totp(user["otp_secret"], otp_code):
-                register_failed_login(user_id=user["user_id"])
+                register_failed_login(identifier=user["user_id"], scope="user")
                 raise ValidationError("invalid otp")
 
-        clear_failed_attempts(user_id=user["user_id"])
+        clear_failed_attempts(identifier=user["user_id"], scope="user")
 
         return {
             "success": True,
@@ -134,7 +134,7 @@ def user_login_email(data):
             "user": verified
         }, 200
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except (ValidationError, NotFoundError, InsufficientDataError, LockoutError) as e:
         raise e
 
     except Exception as e:
@@ -155,13 +155,13 @@ def user_login_username(data):
         if not user:
             raise NotFoundError("user does not exist")
 
-        if is_user_locked_out(user_id=user["user_id"]):
+        if is_user_locked_out(identifier=user["user_id"], scope="user"):
             raise LockoutError("account locked due to too many failed attempts, try later")
 
         verified = authenticate_user_with_username(username, password)
 
         if not verified:
-            register_failed_login(user_id=user["user_id"])
+            register_failed_login(identifier=user["user_id"], scope="user")
             log_action(user_id=user["user_id"], action="failed login attempt", metadata={"username":username})
             raise ValidationError("incorrect password or username")
 
@@ -170,10 +170,10 @@ def user_login_username(data):
                 raise InsufficientDataError
 
             if not verify_totp(user["otp_secret"], otp_code):
-                register_failed_login(user_id=user["user_id"])
+                register_failed_login(identifier=user["user_id"], scope="user")
                 raise ValidationError("invalid otp")
 
-        clear_failed_attempts(user_id=user["user_id"])
+        clear_failed_attempts(identifier=user["user_id"], scope="user")
 
         return {
             "success": True,
@@ -181,7 +181,7 @@ def user_login_username(data):
             "user": verified
         }, 200
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except (ValidationError, NotFoundError, LockoutError, InsufficientDataError) as e:
         raise e
 
     except Exception as e:
@@ -201,7 +201,7 @@ def verify_user_account(user_id):
 
         raise ValidationError("unable to verify user")
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except ValidationError as e:
         raise e
 
     except Exception as e:
@@ -226,7 +226,7 @@ def use_2fa(username, user_id):
 
         raise ValidationError("unable to enable 2fa try again")
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except ValidationError as e:
         raise e
 
     except Exception as e:
@@ -246,7 +246,7 @@ def reset_password(email, new_password):
 
         raise NotFoundError
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except NotFoundError as e:
         raise e
 
     except Exception as e:
@@ -267,7 +267,7 @@ def disable_user(user_id):
 
         raise ConflictError
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except ConflictError as e:
         raise e
 
     except Exception as e:
@@ -288,7 +288,7 @@ def enable_user(user_id):
 
         raise ConflictError
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except ConflictError as e:
         raise e
 
     except Exception as e:
@@ -314,7 +314,7 @@ def edit_user_info(username, data):
 
         raise ValidationError
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except (ValidationError, InsufficientDataError) as e:
         raise e
 
     except Exception as e:
@@ -334,7 +334,7 @@ def delete_user_account(user_id):
 
         raise ValidationError
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except ValidationError as e:
         raise e
 
     except Exception as e:

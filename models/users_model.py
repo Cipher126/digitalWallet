@@ -1,7 +1,7 @@
 from error_handling.error_handler import logger
 from error_handling.errors import (
     InsufficientDataError, NotFoundError,
-    ValidationError, ConflictError
+    ValidationError, ConflictError, UnauthorizedError
 )
 from models.audit_logs_model import insert_audit_log
 from models.tokens_model import insert_refresh_token
@@ -129,11 +129,16 @@ def authenticate_user_with_username(username, password):
     try:
         if verify_password(password, user["password"]) and user["is_active"]:
             access_token, refresh_token = generate_tokens(user["user_id"], user["role"])
+
             return {
                 "username": user["username"],
                 "access_token": access_token,
                 "refresh_token": refresh_token
             }
+
+        if not user["is_active"]:
+            raise UnauthorizedError("Your account has been temporarily lock contact admin")
+
         raise ValidationError("Invalid username or password")
     except Exception as e:
         logger.error(f"Error authenticating with username: {e}", exc_info=True)
@@ -151,6 +156,10 @@ def authenticate_user_with_email(email, password):
                 "access_token": access_token,
                 "refresh_token": refresh_token
             }
+
+        if not user["is_active"]:
+            raise UnauthorizedError("Your account has been temporarily lock contact admin")
+
         raise ValidationError("Invalid email or password")
     except Exception as e:
         logger.error(f"Error authenticating with email: {e}", exc_info=True)

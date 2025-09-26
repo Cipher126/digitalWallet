@@ -1,5 +1,7 @@
 from functools import wraps
 from flask import request, jsonify
+
+from error_handling.errors import ForbiddenError, UnauthorizedError
 from services.auth_services import is_token_blacklisted, logger
 from utils.jwt_utils import verify_token
 
@@ -16,14 +18,10 @@ def token_required(role=None):
                     token = header.split(" ")[1]
 
             if not token:
-                return jsonify({
-                    "error": "access token required"
-                }), 401
+                raise UnauthorizedError("access token required")
 
             if is_token_blacklisted(token):
-                return jsonify({
-                    "error": "token has been revoked"
-                }), 401
+                raise UnauthorizedError("token has been revoked")
 
             try:
                 payload = verify_token(token, refresh=False)
@@ -31,14 +29,10 @@ def token_required(role=None):
                 user_role = payload.get("role")
 
                 if not user_id:
-                    return jsonify({
-                        "error": "Invalid token"
-                    }), 401
+                    raise UnauthorizedError("invalid token")
 
                 if role is not None and user_role != role:
-                    return jsonify({
-                        "error": "Access denied"
-                    }), 403
+                    raise ForbiddenError
 
                 request.user = {"user_id": user_id, "role": user_role}
 

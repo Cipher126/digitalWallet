@@ -3,6 +3,8 @@ import jwt
 import redis
 import datetime
 from database.connection import conn
+from error_handling.errors import NotFoundError
+from models.tokens_model import delete_token, get_refresh_token
 from utils.jwt_utils import create_access_token
 import os
 from dotenv import load_dotenv
@@ -36,27 +38,20 @@ def refresh_access_token(refresh_token: str):
         decoded = jwt.decode(refresh_token, SECRET_KEY, algorithms=["HS256"])
 
         if decoded.get("type") != "refresh":
-            return None
+            return None, "invalid token type"
 
         user_id = decoded["user_id"]
 
+        token_record = get_refresh_token(user_id, refresh_token)
+        if not token_record:
+            raise NotFoundError("refresh token not found")
+
         with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT 1 FROM tokens WHERE user_id = %s AND token = %s
-            """, (user_id, refresh_token))
-
-            details = cursor.fetchone()
-            if not details:
-                return None
-
-            cursor.execute("""
-                SELECT role FROM users WHERE user_id = %s
-            """, (user_id, ))
-
+            cursor.execute("""SELECT role FROM users WHERE user_id = %s""", (user_id,))
             result = cursor.fetchone()
 
             if not result:
-                return None, "user not found"
+                raise NotFoundError("user not found")
 
         role = result[0]
 
@@ -65,17 +60,19 @@ def refresh_access_token(refresh_token: str):
         return access_token, None
 
     except jwt.ExpiredSignatureError:
-        return None
+        return None, "refresh token expired"
     except jwt.InvalidTokenError:
-        return None
+        return None, "invalid refresh token"
+    except NotFoundError as e:
+        raise e
     except Exception as e:
-        logger.error(f"exception occurred: {e}", exc_info=True)
-        return None
+        logger.error(f"Exception occurred in refresh_access_token: {e}", exc_info=True)
+        return None, "internal server error"
 
 def logout(user_id, refresh_token, access_token):
     blacklist_access_token(access_token)
 
-
+    delete_token(user_id=user_id, token=refresh_token)
 
     return {
         "message": "user logout successful"
@@ -87,5 +84,5 @@ def is_token_blacklisted(token):
         jti = decoded["jti"]
         return r.exists(f"blacklist:{jti}") == 1
 
-    except Exception:
-        return False
+    except Exception as e:
+        raise e
