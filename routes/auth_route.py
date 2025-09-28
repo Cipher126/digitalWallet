@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from error_handling.error_handler import logger
 from error_handling.errors import ValidationError, InternalServerError, InsufficientDataError, NotFoundError, \
     LockoutError, ConflictError
-from middle_ware.auth_middleware import token_required
+from middleware.auth_middleware import token_required
 from services.auth_services import refresh_access_token
 from services.totp_services import verify_totp_service
 from services.user_services import oauth_user_login, signup_normal_user, user_login_email, user_login_username, \
