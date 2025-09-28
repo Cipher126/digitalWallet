@@ -13,7 +13,7 @@ with conn.cursor() as cursor:
             oauth_id VARCHAR(255),
             is_oauth_only BOOLEAN DEFAULT FALSE,
             otp_secret TEXT,
-            two_factor_enabled BOOLEAN DEFAULT FALSE
+            two_factor_enabled BOOLEAN DEFAULT FALSE,
             is_active BOOLEAN DEFAULT TRUE,
             is_verified BOOLEAN DEFAULT FALSE,
             role VARCHAR(20) DEFAULT 'user',
@@ -28,17 +28,17 @@ with conn.cursor() as cursor:
             account_number VARCHAR(20) UNIQUE NOT NULL,
             balance NUMERIC(20, 2) DEFAULT 0.00,
             txn_pin TEXT,
-            is_active BOOLEAN DEFAULT TRUE
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
 
     cursor.execute("""
-        CREATE IF NOT EXISTS transactions (
+        CREATE TABLE IF NOT EXISTS transactions (
             txn_id VARCHAR(50)PRIMARY KEY NOT NULL,
             wallet_id VARCHAR(20) REFERENCES wallets(wallet_id) ON DELETE CASCADE,
             user_id VARCHAR(20) REFERENCES users(user_id) ON DELETE CASCADE,
-            txn_type VARCHAR(50) CHECK (txn_type IN ('deposit', 'withdrawal' 'transfer', 'external_inbound', 'external_outbound')),
+            txn_type VARCHAR(50) CHECK (txn_type IN ('credit', 'debit', 'transfer', 'external_inbound', 'external_outbound')),
             amount NUMERIC(20, 2) NOT NULL,
             status VARCHAR(20) CHECK (status IN ('pending', 'success', 'failed')) DEFAULT 'pending',
             reference VARCHAR(255) UNIQUE NOT NULL,

@@ -3,7 +3,7 @@ import jwt
 import redis
 import datetime
 from database.connection import conn
-from error_handling.errors import NotFoundError
+from error_handling.errors import NotFoundError, ValidationError, InternalServerError
 from models.tokens_model import delete_token, get_refresh_token
 from utils.jwt_utils import create_access_token
 import os
@@ -38,7 +38,7 @@ def refresh_access_token(refresh_token: str):
         decoded = jwt.decode(refresh_token, SECRET_KEY, algorithms=["HS256"])
 
         if decoded.get("type") != "refresh":
-            return None, "invalid token type"
+            raise ValidationError("invalid token type")
 
         user_id = decoded["user_id"]
 
@@ -57,17 +57,21 @@ def refresh_access_token(refresh_token: str):
 
         access_token = create_access_token(user_id, role)
 
-        return access_token, None
+        return {
+            "success": True,
+            "message": "token refresh successful",
+            "access_token": access_token
+        }, 200
 
-    except jwt.ExpiredSignatureError:
-        return None, "refresh token expired"
-    except jwt.InvalidTokenError:
-        return None, "invalid refresh token"
-    except NotFoundError as e:
+    except jwt.ExpiredSignatureError as e:
+        raise e
+    except jwt.InvalidTokenError as e:
+        raise e
+    except (ValidationError, NotFoundError) as e:
         raise e
     except Exception as e:
         logger.error(f"Exception occurred in refresh_access_token: {e}", exc_info=True)
-        return None, "internal server error"
+        raise InternalServerError
 
 def logout(user_id, refresh_token, access_token):
     blacklist_access_token(access_token)

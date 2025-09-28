@@ -25,5 +25,8 @@ def send_otp(email, otp):
             server.login(user=EMAIL_ADDRESS, password=EMAIL_PASSWORD)
             server.sendmail(msg['From'], msg['To'], msg.as_string())
 
+        return True
+
     except Exception as e:
         logger.error(f"exception occurred in email otp service: {e}", exc_info=True)
+        raise

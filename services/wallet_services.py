@@ -5,7 +5,7 @@ from models.transactions_model import create_transaction, update_transaction_sta
 from models.wallets_model import (create_wallet_pin, update_wallet_status, get_wallet_by_params,
                             update_wallet_balance_debit, update_wallet_balance_deposit)
 from utils.hashing import verify_password, generate_id
-from utils.rate_limiter import register_failed_login, is_user_locked_out, clear_failed_attempts
+from utils.lockout import register_failed_login, is_user_locked_out, clear_failed_attempts
 
 
 def transfer_between_wallet(amount, to_account, from_account, pin):

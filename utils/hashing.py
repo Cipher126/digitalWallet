@@ -2,7 +2,7 @@ import datetime
 
 import bcrypt
 import uuid
-from utils.rate_limiter import r
+from utils.lockout import r
 
 
 def hash_password(password):

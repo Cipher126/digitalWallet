@@ -237,12 +237,12 @@ def update_user_active_status(user_id, is_active: bool):
         raise
 
 
-def verify_user(user_id, is_verified: bool):
+def verify_user(email, is_verified: bool):
     try:
         with conn:
             with conn.cursor() as cursor:
-                cursor.execute("UPDATE users SET is_verified = %s WHERE user_id = %s",
-                               (is_verified, user_id))
+                cursor.execute("UPDATE users SET is_verified = %s WHERE email = %s",
+                               (is_verified, email))
 
         return True
     except Exception as e:

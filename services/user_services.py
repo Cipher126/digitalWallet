@@ -7,8 +7,10 @@ from models.users_model import (create_user, get_user_by_oauth, oauth_login,
                                 update_user_active_status, enable_2fa, delete_account)
 
 from services.audit_services import log_action
+from services.email_otp_service import send_otp
 from utils.hashing import generate_username
-from utils.rate_limiter import register_failed_login, is_user_locked_out, clear_failed_attempts
+from utils.otp_utils import verify_otp, generate_otp
+from utils.lockout import register_failed_login, is_user_locked_out, clear_failed_attempts
 from utils.totp_utils import generate_totp_secret, generate_totp_uri, verify_totp
 
 
@@ -92,13 +94,8 @@ def oauth_user_login(provider, oauth_id, email, full_name=None, phone=None, otp=
         raise InternalServerError
 
 
-def user_login_email(data):
+def user_login_email(email, password):
     try:
-        email = data.get("email")
-        password = data.get("password")
-        otp_code = data.get("otp")
-
-
         if not all([email, password]):
             raise InsufficientDataError("please provide your email and password")
 
@@ -119,12 +116,11 @@ def user_login_email(data):
 
 
         if user["two_fa_enabled"]:
-            if not otp_code:
-                raise InsufficientDataError
-
-            if not verify_totp(user["otp_secret"], otp_code):
-                register_failed_login(identifier=user["user_id"], scope="user")
-                raise ValidationError("invalid otp")
+            return {
+                "success": True,
+                "message": "otp required",
+                "email": email
+            }, 200
 
         clear_failed_attempts(identifier=user["user_id"], scope="user")
 
@@ -141,11 +137,8 @@ def user_login_email(data):
         logger.error(f"exception occurred in user login email: {e}", exc_info=True)
         raise InternalServerError
 
-def user_login_username(data):
+def user_login_username(username, password):
     try:
-        username = data.get("username")
-        password = data.get("password")
-        otp_code = data.get("otp")
 
         if not all([username, password]):
             raise InsufficientDataError("please provide your username and password")
@@ -166,12 +159,11 @@ def user_login_username(data):
             raise ValidationError("incorrect password or username")
 
         if user["two_fa_enabled"]:
-            if not otp_code:
-                raise InsufficientDataError
-
-            if not verify_totp(user["otp_secret"], otp_code):
-                register_failed_login(identifier=user["user_id"], scope="user")
-                raise ValidationError("invalid otp")
+            return {
+                "success": True,
+                "message": "otp required",
+                "username": username
+            }, 200
 
         clear_failed_attempts(identifier=user["user_id"], scope="user")
 
@@ -189,9 +181,42 @@ def user_login_username(data):
         raise InternalServerError
 
 
-def verify_user_account(user_id):
+def generate_otp_service(email):
     try:
-        verified = verify_user(user_id, True)
+        user = search_user_with_params(email=email)
+        if not user:
+            raise NotFoundError("email doesn't exist")
+
+        otp, signature = generate_otp(email)
+
+        if not otp:
+            raise ValidationError
+
+        sent = send_otp(email, otp)
+
+        if sent:
+            return {
+                "success": True,
+                "message": "OTP sent to your email",
+                "signature": signature
+            }, 200
+
+        raise ValidationError
+    except (ValidationError, NotFoundError) as e:
+        raise e
+    except Exception as e:
+        logger.error(f"exception occurred in generate otp service: {e}", exc_info=True)
+        raise InternalServerError
+
+
+def verify_user_account(email, otp, signature):
+    try:
+        otp_verified =  verify_otp(email, otp, signature)
+
+        if not otp_verified:
+            raise ValidationError("Incorrect/expired otp")
+
+        verified = verify_user(email, True)
 
         if verified:
             return {
@@ -234,8 +259,13 @@ def use_2fa(username, user_id):
         raise InternalServerError
 
 
-def reset_password(email, new_password):
+def reset_password(email, new_password, otp, signature):
     try:
+        otp_verified = verify_otp(email, otp, signature)
+
+        if not otp_verified:
+            raise ValidationError("Incorrect/expired otp")
+
         reset = update_user_password(email, new_password)
 
         if reset:
