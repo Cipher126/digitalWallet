@@ -3,7 +3,7 @@ from error_handling.errors import NotFoundError, ValidationError, LockoutError, 
     InsufficientFundsError, InternalServerError, ConflictError
 from models.transactions_model import create_transaction, update_transaction_status
 from models.wallets_model import (create_wallet_pin, update_wallet_status, get_wallet_by_params,
-                            update_wallet_balance_debit, update_wallet_balance_deposit)
+                                  update_wallet_balance_debit, update_wallet_balance_deposit, update_wallet_pin)
 from utils.hashing import verify_password, generate_id
 from utils.lockout import register_failed_login, is_user_locked_out, clear_failed_attempts
 
@@ -97,6 +97,32 @@ def set_wallet_pin(pin, user_id):
             raise NotFoundError
 
         updated = create_wallet_pin(pin, user_id)
+
+        if not updated:
+            raise ValidationError("Failed to set transaction PIN")
+
+
+        return {
+            "success": True,
+            "message": "transaction pin created"
+        }, 200
+
+    except (ValidationError, NotFoundError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in set txn pin: {e}", exc_info=True)
+        raise InternalServerError
+
+
+def change_wallet_pin(pin, old_pin,  user_id):
+    try:
+        user = get_wallet_by_params(user_id=user_id)
+
+        if not user:
+            raise NotFoundError
+
+        updated = update_wallet_pin(pin, old_pin, user_id)
 
         if not updated:
             raise ValidationError("Failed to set transaction PIN")

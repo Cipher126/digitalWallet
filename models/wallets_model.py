@@ -1,7 +1,7 @@
 from database.connection import conn
 from error_handling.error_handler import logger
-from error_handling.errors import NotFoundError, InsufficientFundsError, InternalServerError
-from utils.hashing import hash_password
+from error_handling.errors import NotFoundError, InsufficientFundsError, InternalServerError, ValidationError
+from utils.hashing import hash_password, verify_password
 
 
 def get_wallet_by_params(account_number=None, user_id=None):
@@ -27,11 +27,37 @@ def get_wallet_by_params(account_number=None, user_id=None):
         raise NotFoundError("wallet not found")
 
     except Exception as e:
-        logger.error(f"Exception occurred in get wallet by params: {e}", exc_info= True)
+        logger.error(f"Exception occurred in get wallet by params: {e}", exc_info=True)
         raise InternalServerError
+
 
 def create_wallet_pin(pin, user_id):
     try:
+        hashed_pin = hash_password(pin)
+
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE wallets SET txn_pin = %s WHERE user_id = %s
+                """, (hashed_pin, user_id))
+
+        return True
+
+    except Exception as e:
+        logger.error(f"exception occurred in create wallet pin: {e}", exc_info=True)
+        raise InternalServerError
+
+
+def update_wallet_pin(pin, old_pin, user_id):
+    try:
+        wallet = get_wallet_by_params(user_id=user_id)
+
+        if not wallet:
+            raise NotFoundError("wallet not found")
+
+        if not verify_password(old_pin, wallet["txn_pin"]):
+            raise ValidationError("incorrect pin provided")
+
         hashed_pin = hash_password(pin)
 
         with conn:
