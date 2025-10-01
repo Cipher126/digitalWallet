@@ -33,7 +33,7 @@ def generate_tokens(user_id, role):
 
 
 def create_user(email, username, full_name, phone=None, password=None,
-                oauth_provider=None, oauth_id=None, is_oauth_only=False):
+                oauth_provider=None, oauth_id=None, is_oauth_only=False, role=None):
     """Create a user (normal signup or OAuth)."""
     user_id = generate_id(8)
 
@@ -47,15 +47,17 @@ def create_user(email, username, full_name, phone=None, password=None,
                 if cursor.fetchone():
                     raise ConflictError("Email or username already exists")
 
+                user_role = role if role else ""
+
                 if password and phone:
                     hashed_pw = hash_password(password)
                     cursor.execute("""
-                        INSERT INTO users (user_id, username, full_name, email, phone, password)
+                        INSERT INTO users (user_id, username, full_name, email, phone, password, role)
                         VALUES (%s, %s, %s, %s, %s, %s)
                         RETURNING role
-                    """, (user_id, username, full_name, email, phone, hashed_pw))
+                    """, (user_id, username, full_name, email, phone, hashed_pw, user_role))
 
-                    role = cursor.fetchone()[0]
+                    saved_role = cursor.fetchone()[0]
 
                     insert_audit_log(user_id, "USER_CREATED", {"method": "email"})
 
@@ -68,7 +70,7 @@ def create_user(email, username, full_name, phone=None, password=None,
                     """, (user_id, username, full_name, email,
                           oauth_provider, oauth_id, is_oauth_only))
 
-                    role = cursor.fetchone()[0]
+                    saved_role = cursor.fetchone()[0]
 
                     insert_audit_log(user_id, "USER_CREATED", {"method": "OAUTH"})
 
@@ -76,7 +78,7 @@ def create_user(email, username, full_name, phone=None, password=None,
                     raise InsufficientDataError("Not enough signup data provided")
 
                 wallet_id, account_number = _insert_wallet(cursor, user_id)
-                access, refresh = generate_tokens(user_id, role)
+                access, refresh = generate_tokens(user_id, saved_role)
 
         return {
             "user_id": user_id,

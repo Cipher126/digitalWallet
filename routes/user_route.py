@@ -1,33 +1,28 @@
-from flask import Blueprint, request, redirect, url_for, jsonify
+from flask import Blueprint, request, redirect, jsonify
 import requests, jwt, os
 from dotenv import load_dotenv
 
 from error_handling.error_handler import logger
 from error_handling.errors import ValidationError, InternalServerError, InsufficientDataError, NotFoundError, \
-    LockoutError, ConflictError
+    LockoutError, ConflictError, ForbiddenError, UnauthorizedError
 from middleware.auth_middleware import token_required
-from services.auth_services import refresh_access_token
+from services.auth_services import refresh_access_token, logout
 from services.totp_services import verify_totp_service
 from services.user_services import oauth_user_login, signup_normal_user, user_login_email, user_login_username, \
-    generate_otp_service, verify_user_account, use_2fa
+    generate_otp_service, verify_user_account, use_2fa, reset_password, edit_user_info, delete_user_account, \
+    user_dashboard
 
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
 load_dotenv()
 
-auth_bp = Blueprint("auth", __name__)
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["5 per minute"]
-)
+user_bp = Blueprint("user", __name__)
 
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
 
-@auth_bp.route('/auth/google')
+@user_bp.route('/auth/google')
 def google_login():
     google_auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth"
@@ -39,7 +34,7 @@ def google_login():
 
     return redirect(google_auth_url)
 
-@auth_bp.route("/auth/google/callback")
+@user_bp.route("/auth/google/callback")
 def google_callback():
     code = request.args.get("code")
 
@@ -83,7 +78,7 @@ def google_callback():
         raise InternalServerError("something went wrong")
 
 
-@auth_bp.route('/auth/signup', methods=['POST'])
+@user_bp.route('/auth/signup', methods=['POST'])
 def signup():
     data = request.get_json()
     try:
@@ -99,7 +94,7 @@ def signup():
         raise InternalServerError("something went wrong")
 
 
-@auth_bp.route('/login', methods=['POST'])
+@user_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
     username = data.get("username")
@@ -131,7 +126,23 @@ def login():
         raise InternalServerError
 
 
-@auth_bp.route('/verify-totp')
+@user_bp.route('/dashboard', methods=['GET'])
+@token_required(role="user")
+def dashboard(user_id):
+    try:
+        response, status = user_dashboard(user_id)
+
+        return jsonify(response), status
+
+    except (NotFoundError, ValidationError, ForbiddenError, UnauthorizedError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in dashboard: {e}", exc_info=True)
+        raise InternalServerError
+
+
+@user_bp.route('/verify-totp', methods=['POST'])
 def verify():
     data = request.get_json()
     try:
@@ -144,8 +155,7 @@ def verify():
         raise InternalServerError
 
 
-@auth_bp.route('/get-otp', methods=['GET'])
-@limiter.limit("5 per minutes")
+@user_bp.route('/get-otp', methods=['GET'])
 def get_otp():
     try:
         email = request.args.get("email")
@@ -157,7 +167,7 @@ def get_otp():
 
         return jsonify(response), status
 
-    except (ValidationError, NotFoundError, InsufficientDataError) as e:
+    except (ValidationError, NotFoundError, InsufficientDataError, ForbiddenError, UnauthorizedError) as e:
         raise e
 
     except Exception as e:
@@ -165,7 +175,7 @@ def get_otp():
         raise InternalServerError
 
 
-@auth_bp.route('/verify-account', methods=['PUT'])
+@user_bp.route('/verify-account', methods=['PUT'])
 def verify_user():
     try:
         data = request.get_json()
@@ -186,8 +196,8 @@ def verify_user():
         raise InternalServerError
 
 
-@auth_bp.route('/enable-2fa', methods=['PUT'])
-@token_required(role="user")
+@user_bp.route('/enable-2fa', methods=['PUT'])
+@token_required()
 def activate_2fa(user_id):
     try:
         data = request.get_json()
@@ -198,7 +208,7 @@ def activate_2fa(user_id):
 
         return jsonify(response), status
 
-    except ValidationError as e:
+    except (ValidationError, ForbiddenError, UnauthorizedError) as e:
         raise e
 
     except Exception as e:
@@ -206,10 +216,11 @@ def activate_2fa(user_id):
         raise InternalServerError
 
 
-@auth_bp.route('/refresh-token', methods=['GET'])
+@user_bp.route('/refresh-token', methods=['POST'])
 def refresh():
     try:
-        token = request.args.get("refresh-token")
+        data = request.get_json()
+        token = data.get("refresh-token")
         response, status = refresh_access_token(token)
 
         return jsonify(response), status
@@ -220,4 +231,109 @@ def refresh():
 
     except Exception as e:
         logger.error(f"exception occurred in refresh token route: {e}", exc_info=True)
+        raise InternalServerError
+
+
+@user_bp.route('/change-password', methods=['PUT'])
+@token_required()
+def new_password(user_id):
+    try:
+        data = request.get_json()
+        password = data.get("new_password")
+        old_password = data.get("old_password")
+
+        if not all([password, old_password]):
+            raise InsufficientDataError("provide your old password")
+
+        response, status = reset_password(new_password=password, old_password=old_password, user_id=user_id)
+
+        return jsonify(response), status
+
+    except (ValidationError, ForbiddenError, NotFoundError, InsufficientDataError, UnauthorizedError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in change password: {e}")
+        raise InternalServerError
+
+
+@user_bp.route('/reset-password', methods=['PUT'])
+def reset():
+    try:
+        data = request.get_json()
+        email = data.get("email")
+        password = data.get("new_password")
+        otp = data.get("otp")
+        signature = data.get("signature")
+
+        if not all([email, password, otp, signature]):
+            raise InsufficientDataError
+
+        response, status = reset_password(new_password=password, email=email, otp=otp, signature=signature)
+        return jsonify(response), status
+
+    except (ValidationError, ForbiddenError, NotFoundError, InsufficientDataError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in reset password: {e}")
+        raise InternalServerError
+
+
+@user_bp.route('/edit-info/<username>', methods=['PUT'])
+@token_required(role="user")
+def update(user_id, username):
+    try:
+        data = request.get_json()
+
+        response, status = edit_user_info(username, data)
+
+        return jsonify(response), status
+
+    except (ValidationError, InsufficientDataError, ForbiddenError, UnauthorizedError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in edit info: {e}", exc_info=True)
+        raise InternalServerError
+
+
+@user_bp.route('/delete-account', methods=['DELETE'])
+@token_required(role="user")
+def delete_user(user_id):
+    try:
+        response, status = delete_user_account(user_id)
+
+        return jsonify(response), status
+
+    except (ValidationError, ForbiddenError, UnauthorizedError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in delete user: {e}", exc_info=True)
+        raise InternalServerError
+
+
+@user_bp.route('/logout', methods=['POST'])
+@token_required
+def logout_user(user_id):
+    try:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise UnauthorizedError("access token missing")
+
+        token = auth_header.split(" ")[1]
+        refresh_token = request.json.get("refresh_token")
+        if not refresh_token:
+            raise InsufficientDataError("refresh token missing")
+
+        response, status = logout(user_id, token, refresh_token)
+
+        return jsonify(response), status
+
+    except (UnauthorizedError, InsufficientDataError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in logout user: {e}")
         raise InternalServerError

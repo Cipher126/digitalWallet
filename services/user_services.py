@@ -1,14 +1,16 @@
 from error_handling.error_handler import logger
 from error_handling.errors import ConflictError, InsufficientDataError, InternalServerError, \
-    ValidationError, NotFoundError, LockoutError
+    ValidationError, NotFoundError, LockoutError, ForbiddenError
+from models.transactions_model import get_transaction_per_user
 from models.users_model import (create_user, get_user_by_oauth, oauth_login,
                                 authenticate_user_with_email, authenticate_user_with_username,
                                 search_user_with_params, verify_user, update_user_info, update_user_password,
                                 update_user_active_status, enable_2fa, delete_account)
+from models.wallets_model import get_wallet_by_params
 
 from services.audit_services import log_action
 from services.email_otp_service import send_otp
-from utils.hashing import generate_username
+from utils.hashing import generate_username, verify_password
 from utils.otp_utils import verify_otp, generate_otp
 from utils.lockout import register_failed_login, is_user_locked_out, clear_failed_attempts
 from utils.totp_utils import generate_totp_secret, generate_totp_uri, verify_totp
@@ -20,6 +22,8 @@ def signup_normal_user(data):
     full_name = data.get("full_name")
     phone = data.get("phone")
     password = data.get("password")
+    user_role = data.get("role")
+    role = user_role if user_role else ""
 
     try:
 
@@ -33,7 +37,7 @@ def signup_normal_user(data):
         except NotFoundError:
             pass
 
-        new_user = create_user(email, username, full_name, phone, password)
+        new_user = create_user(email, username, full_name, phone, password, role=role)
         log_action(username, "register_user", {"email":email})
 
         return {
@@ -181,6 +185,48 @@ def user_login_username(username, password):
         raise InternalServerError
 
 
+def user_dashboard(user_id):
+    try:
+        user = search_user_with_params(user_id=user_id)
+
+        if not user:
+            raise NotFoundError("user not found")
+
+        wallet = get_wallet_by_params(user_id=user_id)
+
+        if not wallet:
+            raise NotFoundError("wallet not found")
+
+        history = get_transaction_per_user(user_id=user_id, limit=0, offset=0)
+
+        if not history:
+            raise NotFoundError("no transaction found")
+
+        details = {
+            "name": user["name"],
+            "wallet_id": wallet["wallet_id"],
+            "account_number": wallet["account_number"],
+            "balance": wallet["balance"],
+            "email": user["email"],
+            "username": user["username"],
+            "phone": user["phone"],
+            "transaction_history": history
+        }
+
+        return {
+            "success": True,
+            "message": "successful",
+            "user": details
+        }, 200
+
+    except NotFoundError as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in user dashboard: {e}", exc_info=True)
+        raise InternalServerError
+
+
 def generate_otp_service(email):
     try:
         user = search_user_with_params(email=email)
@@ -259,24 +305,47 @@ def use_2fa(username, user_id):
         raise InternalServerError
 
 
-def reset_password(email, new_password, otp, signature):
+def reset_password(new_password, old_password=None, user_id=None, email=None, otp=None, signature=None):
     try:
-        otp_verified = verify_otp(email, otp, signature)
+        if otp and signature and email:
+            otp_verified = verify_otp(email, otp, signature)
 
-        if not otp_verified:
-            raise ValidationError("Incorrect/expired otp")
+            if not otp_verified:
+                raise ValidationError("Incorrect/expired otp")
 
-        reset = update_user_password(email, new_password)
+            reset = update_user_password(email, new_password)
 
-        if reset:
-            return {
-                "success": True,
-                "message": "password has been changed successfully"
-            }, 200
+            if reset:
+                return {
+                    "success": True,
+                    "message": "password has been changed successfully"
+                }, 200
 
-        raise NotFoundError
+            raise ValidationError("password reset failed")
 
-    except NotFoundError as e:
+        if user_id and old_password:
+            user = search_user_with_params(user_id=user_id)
+            if not user:
+                raise NotFoundError("user not found")
+
+            stored_password = user["password"]
+
+            if not verify_password(old_password, stored_password):
+                raise ValidationError("incorrect old password")
+
+            reset = update_user_password(user["email"], new_password)
+
+            if reset:
+                return {
+                    "success": True,
+                    "message": "password has been changed successfully"
+                }, 200
+
+            raise ValidationError("password reset failed")
+
+        raise ForbiddenError("Invalid password reset request")
+
+    except (NotFoundError, ValidationError, ForbiddenError) as e:
         raise e
 
     except Exception as e:

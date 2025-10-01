@@ -9,7 +9,7 @@ from utils.lockout import register_failed_login, is_user_locked_out, clear_faile
 
 
 def transfer_between_wallet(amount, to_account, from_account, pin):
-    txn_base = generate_id(15)  # shared base ID for both transactions
+    txn_base = generate_id(15)
     debit_txn_id = f"{txn_base}D"
     credit_txn_id = f"{txn_base}C"
 
