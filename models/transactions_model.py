@@ -5,10 +5,11 @@ from error_handling.error_handler import logger
 from error_handling.errors import NotFoundError
 from models.audit_logs_model import insert_audit_log
 from models.webhook_logs_model import insert_webhook_log
-from utils.hashing import generate_reference, generate_id
+from utils.hashing import generate_reference
 
 
-def create_transaction(txn_id, wallet_id, user_id, txn_type, amount, to_account=None, from_account=None, reference=None, description=""):
+def create_transaction(txn_id, wallet_id, user_id, txn_type, amount,
+                       to_account=None, from_account=None, reference=None, description=""):
     """Insert a transaction record"""
     try:
         if not reference:
@@ -72,13 +73,19 @@ def get_transaction_with_param(ref=None, txn_id=None):
         logger.error(f"exception occurred in get transaction with params: {e}", exc_info=True)
         raise
 
-def get_transaction_per_user(user_id, limit=50, offset=0):
+def get_transaction_per_user(user_id, limit=None, offset=None):
     try:
         with conn:
             with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT * FROM transactions WHERE user_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s
-                """, (user_id, limit, offset))
+                if limit and offset:
+                    cursor.execute("""
+                        SELECT * FROM transactions WHERE user_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s
+                    """, (user_id, limit, offset))
+
+                else:
+                    cursor.execute("""
+                        SELECT * FROM transactions WHERE user_id = %s ORDER BY created_at DESC
+                    """, (user_id, ))
 
                 txn = cursor.fetchall()
 

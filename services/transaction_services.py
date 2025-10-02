@@ -1,5 +1,6 @@
 from error_handling.error_handler import logger
-from error_handling.errors import NotFoundError, InternalServerError, InsufficientDataError
+from error_handling.errors import NotFoundError, InternalServerError, InsufficientDataError, ValidationError, \
+    UnauthorizedError, ForbiddenError
 from models.transactions_model import get_transaction_per_user, get_transaction_with_param
 from models.users_model import search_user_with_params
 
@@ -34,7 +35,7 @@ def view_transaction_history(user_id, limit=None, offset=None):
             "history": history
         }, 200
 
-    except NotFoundError as e:
+    except (NotFoundError, ValidationError, UnauthorizedError, ForbiddenError) as e:
         raise e
 
     except Exception as e:
@@ -45,7 +46,7 @@ def view_transaction_history(user_id, limit=None, offset=None):
 def view_single_transaction(txn_id=None, ref=None):
     try:
         if ref:
-            details = get_transaction_with_param(ref=ref)
+            details = get_transaction_with_param(ref=ref, txn_id=txn_id)
 
             if not details:
                 raise NotFoundError("transaction not found")

@@ -6,6 +6,7 @@ from error_handling.error_handler import logger
 from error_handling.errors import ValidationError, InternalServerError, InsufficientDataError, NotFoundError, \
     LockoutError, ConflictError, ForbiddenError, UnauthorizedError
 from middleware.auth_middleware import token_required
+from middleware.rate_middleware import rate_limiter
 from services.auth_services import refresh_access_token, logout
 from services.totp_services import verify_totp_service
 from services.user_services import oauth_user_login, signup_normal_user, user_login_email, user_login_username, \
@@ -95,6 +96,7 @@ def signup():
 
 
 @user_bp.route('/login', methods=['POST'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 def login():
     data = request.get_json()
     username = data.get("username")
@@ -127,6 +129,7 @@ def login():
 
 
 @user_bp.route('/dashboard', methods=['GET'])
+@rate_limiter(capacity=30, refill_rate=1)
 @token_required(role="user")
 def dashboard(user_id):
     try:
@@ -143,6 +146,7 @@ def dashboard(user_id):
 
 
 @user_bp.route('/verify-totp', methods=['POST'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 def verify():
     data = request.get_json()
     try:
@@ -156,6 +160,7 @@ def verify():
 
 
 @user_bp.route('/get-otp', methods=['GET'])
+@rate_limiter(capacity=10, refill_rate=0.5)
 def get_otp():
     try:
         email = request.args.get("email")
@@ -176,6 +181,7 @@ def get_otp():
 
 
 @user_bp.route('/verify-account', methods=['PUT'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 def verify_user():
     try:
         data = request.get_json()
@@ -197,6 +203,7 @@ def verify_user():
 
 
 @user_bp.route('/enable-2fa', methods=['PUT'])
+@rate_limiter(capacity=10, refill_rate=0.5)
 @token_required()
 def activate_2fa(user_id):
     try:
@@ -217,6 +224,7 @@ def activate_2fa(user_id):
 
 
 @user_bp.route('/refresh-token', methods=['POST'])
+@rate_limiter(capacity=30, refill_rate=1)
 def refresh():
     try:
         data = request.get_json()
@@ -235,6 +243,7 @@ def refresh():
 
 
 @user_bp.route('/change-password', methods=['PUT'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 @token_required()
 def new_password(user_id):
     try:
@@ -258,6 +267,7 @@ def new_password(user_id):
 
 
 @user_bp.route('/reset-password', methods=['PUT'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 def reset():
     try:
         data = request.get_json()
@@ -281,6 +291,7 @@ def reset():
 
 
 @user_bp.route('/edit-info/<username>', methods=['PUT'])
+@rate_limiter(capacity=30, refill_rate=1)
 @token_required(role="user")
 def update(user_id, username):
     try:

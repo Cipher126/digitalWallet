@@ -4,11 +4,13 @@ from error_handling.error_handler import logger
 from error_handling.errors import InsufficientDataError, ValidationError, NotFoundError, InternalServerError, \
     UnauthorizedError, ForbiddenError, LockoutError, InsufficientFundsError
 from middleware.auth_middleware import token_required
+from middleware.rate_middleware import rate_limiter
 from services.wallet_services import set_wallet_pin, change_wallet_pin, transfer_between_wallet
 
 wallet_bp = Blueprint("wallet", __name__)
 
 @wallet_bp.route('/set-pin', methods=['POST'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role="user")
 def set_pin(user_id):
     try:
@@ -31,6 +33,7 @@ def set_pin(user_id):
 
 
 @wallet_bp.route('/change-pin', methods=['PUT'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role="user")
 def change(user_id):
     try:
@@ -54,6 +57,7 @@ def change(user_id):
 
 
 @wallet_bp.route('/transfer', methods=['POST'])
+@rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role="user")
 def transfer(user_id):
     try:
