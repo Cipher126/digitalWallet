@@ -2,8 +2,11 @@ from error_handling.error_handler import logger
 from error_handling.errors import NotFoundError, ValidationError, LockoutError, UnauthorizedError, \
     InsufficientFundsError, InternalServerError, ConflictError
 from models.transactions_model import create_transaction, update_transaction_status
+from models.users_model import search_user_with_params
 from models.wallets_model import (create_wallet_pin, update_wallet_status, get_wallet_by_params,
                                   update_wallet_balance_debit, update_wallet_balance_deposit, update_wallet_pin)
+from services.email_service import send_transaction_notification
+from services.notification_services import send_txn_push
 from utils.hashing import verify_password, generate_id
 from utils.lockout import register_failed_login, is_user_locked_out, clear_failed_attempts
 
@@ -59,13 +62,36 @@ def transfer_between_wallet(amount, to_account, from_account, pin):
 
         if credit and not debit:
             update_transaction_status("failed", debit_txn_id)
-            update_wallet_balance_debit(amount, to_wallet["user_id"])  # rollback credit
+            update_wallet_balance_debit(amount, to_wallet["user_id"])
 
         if debit and not credit:
             update_transaction_status("failed", credit_txn_id)
             update_wallet_balance_deposit(amount, from_wallet["user_id"])  # rollback debit
 
         if debit and credit:
+            debit_user = search_user_with_params(user_id=from_wallet["user_id"])
+            debit_email = debit_user["email"]
+            debit_name = debit_user["name"]
+
+            debit_sent = send_transaction_notification(debit_email, debit_name, "debit", amount, new_balance)
+            debit_push = send_txn_push(from_wallet["user_id"], "debit", amount, new_balance)
+
+            if not debit_sent or not debit_push:
+                logger.warn(f"unable to send debit alert: {debit_sent or debit_push}", exc_info=True)
+
+            credit_user = search_user_with_params(user_id=to_wallet["user_id"])
+            credit_email = credit_user["email"]
+            credit_name = credit_user["name"]
+            credit_wallet = get_wallet_by_params(account_number=to_account)
+            credit_balance = credit_wallet["balance"]
+
+            credit_push = send_txn_push(to_wallet["user_id"], "credit", amount, credit_balance)
+
+            credit_sent = send_transaction_notification(credit_email, credit_name, "credit", amount, credit_balance)
+
+            if not credit_sent or not credit_push:
+                logger.warn(f"unable to send credit alert: {credit_sent or credit_push}", exc_info=True)
+
             clear_failed_attempts(scope="wallet", identifier=from_wallet["wallet_id"])
             update_transaction_status("success", debit_txn_id)
             update_transaction_status("success", credit_txn_id)

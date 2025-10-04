@@ -1,15 +1,15 @@
 from error_handling.error_handler import logger
 from error_handling.errors import ConflictError, InsufficientDataError, InternalServerError, \
-    ValidationError, NotFoundError, LockoutError, ForbiddenError
+    ValidationError, NotFoundError, LockoutError, ForbiddenError, UnauthorizedError
 from models.transactions_model import get_transaction_per_user
 from models.users_model import (create_user, get_user_by_oauth, oauth_login,
                                 authenticate_user_with_email, authenticate_user_with_username,
                                 search_user_with_params, verify_user, update_user_info, update_user_password,
-                                update_user_active_status, enable_2fa, delete_account)
+                                update_user_active_status, enable_2fa, delete_account, update_fcm_token)
 from models.wallets_model import get_wallet_by_params
 
 from services.audit_services import log_action
-from services.email_otp_service import send_otp
+from services.email_service import send_otp
 from utils.hashing import generate_username, verify_password
 from utils.otp_utils import verify_otp, generate_otp
 from utils.lockout import register_failed_login, is_user_locked_out, clear_failed_attempts
@@ -418,6 +418,26 @@ def edit_user_info(username, data):
 
     except Exception as e:
         logger.error(f"exception occurred in edit user info: {e}", exc_info=True)
+        raise InternalServerError
+
+
+def enable_notification(token, user_id):
+    try:
+        notified = update_fcm_token(token, user_id)
+
+        if not notified:
+            raise ValidationError("could not enable notification")
+
+        return {
+            "success": True,
+            "message": "notification enabled"
+        }, 200
+
+    except (ValidationError, UnauthorizedError, ForbiddenError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in enable notification: {e}", exc_info=True)
         raise InternalServerError
 
 

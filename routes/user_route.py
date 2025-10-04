@@ -7,12 +7,13 @@ from error_handling.errors import ValidationError, InternalServerError, Insuffic
     LockoutError, ConflictError, ForbiddenError, UnauthorizedError
 from middleware.auth_middleware import token_required
 from middleware.rate_middleware import rate_limiter
+from models.users_model import search_user_with_params
 from services.auth_services import refresh_access_token, logout
+from services.email_service import send_login_alert
 from services.totp_services import verify_totp_service
 from services.user_services import oauth_user_login, signup_normal_user, user_login_email, user_login_username, \
     generate_otp_service, verify_user_account, use_2fa, reset_password, edit_user_info, delete_user_account, \
-    user_dashboard
-
+    user_dashboard, enable_notification
 
 load_dotenv()
 
@@ -102,19 +103,48 @@ def login():
     username = data.get("username")
     email = data.get("email")
     password = data.get("password")
+    ip_address = request.remote_addr
+
+    try:
+        res = requests.get(f"http://ip-api.com/json/{ip_address}")
+
+        location_info = res.json()
+
+        location =f'{location_info["city"]}, {location_info["country"]}'
+    except Exception as e:
+        logger.warning(f"could not fetch location: {e}")
 
     try:
         if username:
+            email = search_user_with_params(username=username)["email"]
+
+            if not email:
+                raise NotFoundError("email not found ")
+
             if not all([username, password]):
                 raise InsufficientDataError
+
             response, status = user_login_username(username, password)
+
+            if response["message"] == "login successful":
+                sent = send_login_alert(email, location)
+
+                if not sent:
+                    logger.warning(f"unable to send login alert: {sent}", exc_info=True)
 
             return jsonify(response), status
 
         if email:
             if not all([email, password]):
                 raise InsufficientDataError
+
             response, status = user_login_email(email, password)
+
+            if response["message"] == "login successful":
+                sent = send_login_alert(email, location)
+
+                if not sent:
+                    logger.warn(f"unable to send login alert: {sent}", exc_info=True)
 
             return jsonify(response), status
 
@@ -306,6 +336,26 @@ def update(user_id, username):
 
     except Exception as e:
         logger.error(f"exception occurred in edit info: {e}", exc_info=True)
+        raise InternalServerError
+
+
+@user_bp.route('/enable-notification', methods=['PUT'])
+@token_required(role="user")
+@rate_limiter(capacity=30, refill_rate=1)
+def notify(user_id):
+    try:
+        data = request.get_json()
+        token = data.get("token")
+
+        response, status = enable_notification(token, user_id)
+
+        return jsonify(response), status
+
+    except (ValidationError, UnauthorizedError, ForbiddenError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in enable notification: {e}", exc_info=True)
         raise InternalServerError
 
 

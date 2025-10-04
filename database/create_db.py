@@ -17,7 +17,8 @@ with conn.cursor() as cursor:
             is_active BOOLEAN DEFAULT TRUE,
             is_verified BOOLEAN DEFAULT FALSE,
             role VARCHAR(20) DEFAULT 'user',
-            created_at TIMESTAMP DEFAULT NOW()
+            created_at TIMESTAMP DEFAULT NOW(),
+            fcm_token VARCHAR(255)
         )
     """)
 

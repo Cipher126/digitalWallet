@@ -116,7 +116,8 @@ def search_user_with_params(username=None, email=None, user_id=None):
                 "is_active": user[11],
                 "otp_secret": user[9],
                 "two_fa_enabled": user[10],
-                "role": user[13]
+                "role": user[13],
+                "fcm_token": [15]
             }
         raise NotFoundError("User not found")
 
@@ -313,4 +314,17 @@ def delete_account(user_id):
         return True
     except Exception as e:
         logger.error(f"Error deleting account: {e}", exc_info=True)
+        raise
+
+
+def update_fcm_token(token, user_id):
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute("UPDATE users SET fcm_token = %s WHERE user_id = %s",
+                               (token, user_id))
+
+        return True
+    except Exception as e:
+        logger.error(f"Error verifying user: {e}", exc_info=True)
         raise
