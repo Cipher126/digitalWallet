@@ -41,21 +41,21 @@ def transfer_between_wallet(amount, to_account, from_account, pin):
         new_balance = from_wallet["balance"] - amount
 
         create_transaction(
-            debit_txn_id,
-            from_wallet["wallet_id"],
-            from_wallet["user_id"],
-            "debit",
-            amount,
+            txn_id = debit_txn_id,
+            wallet_id=from_wallet["wallet_id"],
+            user_id=from_wallet["user_id"],
+            txn_type="debit",
+            amount=amount,
             from_account=from_wallet,
             to_account=to_wallet
         )
 
         create_transaction(
-            credit_txn_id,
-            to_wallet["wallet_id"],
-            to_wallet["user_id"],
-            "credit",
-            amount,
+            txn_id=credit_txn_id,
+            wallet_id=to_wallet["wallet_id"],
+            user_id=to_wallet["user_id"],
+            txn_type="credit",
+            amount=amount,
             from_account=from_wallet,
             to_account=to_wallet
         )

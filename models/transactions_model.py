@@ -5,10 +5,10 @@ from error_handling.error_handler import logger
 from error_handling.errors import NotFoundError
 from models.audit_logs_model import insert_audit_log
 from models.webhook_logs_model import insert_webhook_log
-from utils.hashing import generate_reference
+from utils.hashing import generate_reference, generate_id
 
 
-def create_transaction(txn_id, wallet_id, user_id, txn_type, amount,
+def create_transaction(wallet_id, user_id, txn_type, amount, txn_id=generate_id(20),
                        to_account=None, from_account=None, reference=None, description=""):
     """Insert a transaction record"""
     try:
