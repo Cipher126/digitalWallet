@@ -26,11 +26,12 @@ with conn.cursor() as cursor:
         CREATE TABLE IF NOT EXISTS wallets (
             wallet_id VARCHAR(50) PRIMARY KEY NOT NULL,
             user_id VARCHAR(20) REFERENCES users(user_id) ON DELETE CASCADE,
-            account_number VARCHAR(20) UNIQUE NOT NULL,
+            account_number VARCHAR(20) UNIQUE,
             balance NUMERIC(20, 2) DEFAULT 0.00,
             txn_pin TEXT,
             is_active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT NOW()
+            created_at TIMESTAMP DEFAULT NOW(),
+            bvn VARCHAR(20) UNIQUE
         )
     """)
 

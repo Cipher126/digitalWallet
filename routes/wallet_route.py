@@ -5,7 +5,9 @@ from error_handling.errors import InsufficientDataError, ValidationError, NotFou
     UnauthorizedError, ForbiddenError, LockoutError, InsufficientFundsError
 from middleware.auth_middleware import token_required
 from middleware.rate_middleware import rate_limiter
-from services.wallet_services import set_wallet_pin, change_wallet_pin, transfer_between_wallet
+from models.wallets_model import get_wallet_by_params
+from services.monnify_services import process_outgoing_transfer
+from services.wallet_services import set_wallet_pin, change_wallet_pin, transfer_between_wallet, activate_wallet
 
 wallet_bp = Blueprint("wallet", __name__)
 
@@ -29,6 +31,26 @@ def set_pin(user_id):
 
     except Exception as e:
         logger.error(f"exception occurred in set wallet pin: {e}", exc_info=True)
+        raise InternalServerError
+
+
+@wallet_bp.route('/activate', methods=['POST'])
+@rate_limiter(capacity=5, refill_rate=0.1)
+@token_required(role="user")
+def activate(user_id):
+    try:
+        data = request.get_json()
+        bvn = data.get("bvn")
+
+        response, status = activate_wallet(user_id, bvn)
+
+        return jsonify(response), status
+
+    except (ValidationError, UnauthorizedError, NotFoundError, ForbiddenError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in activate wallet: {e}", exc_info=True)
         raise InternalServerError
 
 
@@ -56,7 +78,7 @@ def change(user_id):
         raise InternalServerError
 
 
-@wallet_bp.route('/transfer', methods=['POST'])
+@wallet_bp.route('/transfer/internal', methods=['POST'])
 @rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role="user")
 def transfer(user_id):
@@ -78,3 +100,37 @@ def transfer(user_id):
     except Exception as e:
         logger.error(f"exception occurred in transfer: {e}", exc_info=True)
         raise InternalServerError
+
+
+@wallet_bp.route('/transfer/external', methods=['POST'])
+@rate_limiter(capacity=5, refill_rate=0.1)
+@token_required(role="user")
+def external(user_id):
+    try:
+        data = request.get_json()
+        amount = data.get("amount")
+        bank_code = data.get("bank_code")
+        destination_account = data.get("destination_account")
+        narration = data.get("narration")
+
+        account_number = get_wallet_by_params(user_id=user_id)["account_number"]
+
+        if not account_number:
+            raise NotFoundError("wallet not found")
+
+        response, status = process_outgoing_transfer(
+            account_number,
+            amount,
+            bank_code,
+            destination_account,
+            narration
+        )
+
+        return jsonify(response), status
+
+    except (InsufficientFundsError, NotFoundError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"Error initiating interbank transfer: {e}", exc_info=True)
+        raise

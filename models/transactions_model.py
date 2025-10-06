@@ -38,7 +38,7 @@ def create_transaction(wallet_id, user_id, txn_type, amount, txn_id=generate_id(
             "description": description
         })
 
-        return True
+        return txn_id
     except Exception as e:
         logger.error(f"Error creating transaction: {e}", exc_info=True)
         raise

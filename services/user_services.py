@@ -210,6 +210,7 @@ def user_dashboard(user_id):
             "email": user["email"],
             "username": user["username"],
             "phone": user["phone"],
+            "bvn": wallet["bvn"],
             "transaction_history": history
         }
 

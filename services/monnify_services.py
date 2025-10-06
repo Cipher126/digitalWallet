@@ -3,8 +3,9 @@ import base64
 from dotenv import load_dotenv
 import requests
 
-from error_handling.errors import NotFoundError
+from error_handling.errors import NotFoundError, InsufficientFundsError
 from models.audit_logs_model import insert_audit_log
+from models.interbank_models import insert_interbank_transfer
 from models.transactions_model import create_transaction
 from models.users_model import search_user_with_params
 from models.wallets_model import update_wallet_balance_deposit, get_wallet_by_params, update_wallet_balance_debit
@@ -13,6 +14,7 @@ from services.auth_services import r
 from error_handling.error_handler import logger
 from services.email_service import send_transaction_notification
 from services.notification_services import send_txn_push
+from utils.hashing import generate_reference
 
 load_dotenv()
 
@@ -82,15 +84,15 @@ def create_reserved_account(user_id, account_name, email, bvn):
         res.raise_for_status()
 
         data = res.json()
-        return data["responseBody"]
+        return data["responseBody"]["accounts"]
 
     except Exception as e:
         logger.error(f"Error creating reserved account: {e}", exc_info=True)
         raise
 
 
-def initiate_interbank_transfer(account, amount, destination_bank_code, destination_account_number,
-                                narration, reference):
+def process_outgoing_transfer(account, amount, destination_bank_code, destination_account_number,
+                                narration):
     """
     Send funds to another bank account via Monnify.
     """
@@ -99,8 +101,12 @@ def initiate_interbank_transfer(account, amount, destination_bank_code, destinat
         if not wallet:
             raise NotFoundError("sender account does not exist")
 
+        if wallet["balance"] < amount:
+            raise InsufficientFundsError(details={"available": wallet["balance"], "required": amount})
+
 
         token = get_auth_token()
+        reference = generate_reference()
 
         payload = {
             "amount": amount,
@@ -112,7 +118,7 @@ def initiate_interbank_transfer(account, amount, destination_bank_code, destinat
             "sourceAccountNumber": os.getenv("MONNIFY_WALLET_ACCOUNT"),
         }
 
-        url = f"{MONNIFY_BASE_URL}api/v2/disbursements/single"
+        url = f"{MONNIFY_BASE_URL}/api/v2/disbursements/single"
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
@@ -125,6 +131,16 @@ def initiate_interbank_transfer(account, amount, destination_bank_code, destinat
 
         if data["requestSuccessful"]:
             update_wallet_balance_debit(amount, user_id=wallet["user_id"])
+
+        insert_interbank_transfer(
+            user_id=wallet["user_id"],
+            wallet_id=wallet["wallet_id"],
+            amount=amount,
+            destination_bank_code=destination_bank_code,
+            destination_account_number=destination_account_number,
+            beneficiary_name="",
+            narration=narration
+        )
 
         create_transaction(
             wallet_id=wallet["wallet_id"],
@@ -160,6 +176,9 @@ def initiate_interbank_transfer(account, amount, destination_bank_code, destinat
         send_txn_push(wallet["user_id"], "credit", amount, wallet["balance"] + amount)
         return data["responseBody"]
 
+    except (InsufficientFundsError, NotFoundError) as e:
+        raise e
+
     except Exception as e:
         logger.error(f"Error initiating interbank transfer: {e}", exc_info=True)
         raise
@@ -174,7 +193,7 @@ def process_incoming_transfer(payload):
         paid_by = payload.get("customerName")
         narration = payload.get("paymentDescription")
 
-        wallet = get_wallet_by_params(account_number=account_reference)
+        wallet = get_wallet_by_params(user_id=account_reference)
 
         if not wallet:
             raise NotFoundError("wallet not found for incoming transfer")

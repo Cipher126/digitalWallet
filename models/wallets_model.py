@@ -21,6 +21,7 @@ def get_wallet_by_params(account_number=None, user_id=None):
                 "account_number": wallet[2],
                 "balance": wallet[3],
                 "txn_pin": wallet[4],
+                "bvn": wallet[6],
                 "is_active": wallet[5]
             }
 
@@ -45,6 +46,36 @@ def create_wallet_pin(pin, user_id):
 
     except Exception as e:
         logger.error(f"exception occurred in create wallet pin: {e}", exc_info=True)
+        raise InternalServerError
+
+
+def update_wallet_bvn(bvn, user_id):
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE wallets SET bvn = %s WHERE user_id = %s
+                """, (bvn, user_id))
+
+        return True
+
+    except Exception as e:
+        logger.error(f"exception occurred in update wallet bvn: {e}", exc_info=True)
+        raise InternalServerError
+
+
+def set_account_number(account, user_id):
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE wallets SET account_number = %s WHERE user_id = %s
+                """, (account, user_id))
+
+        return True
+
+    except Exception as e:
+        logger.error(f"exception occurred in set account number: {e}", exc_info=True)
         raise InternalServerError
 
 

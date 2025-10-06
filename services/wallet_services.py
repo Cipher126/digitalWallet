@@ -1,14 +1,59 @@
 from error_handling.error_handler import logger
 from error_handling.errors import NotFoundError, ValidationError, LockoutError, UnauthorizedError, \
-    InsufficientFundsError, InternalServerError, ConflictError
+    InsufficientFundsError, InternalServerError, ConflictError, ForbiddenError
 from models.transactions_model import create_transaction, update_transaction_status
 from models.users_model import search_user_with_params
 from models.wallets_model import (create_wallet_pin, update_wallet_status, get_wallet_by_params,
-                                  update_wallet_balance_debit, update_wallet_balance_deposit, update_wallet_pin)
+                                  update_wallet_balance_debit, update_wallet_balance_deposit, update_wallet_pin,
+                                  update_wallet_bvn, set_account_number)
 from services.email_service import send_transaction_notification
+from services.monnify_services import create_reserved_account
 from services.notification_services import send_txn_push
 from utils.hashing import verify_password, generate_id
 from utils.lockout import register_failed_login, is_user_locked_out, clear_failed_attempts
+
+
+def activate_wallet(user_id, bvn):
+    try:
+        wallet = get_wallet_by_params(user_id=user_id)
+
+        if not wallet:
+            raise NotFoundError("wallet not found")
+
+        user = search_user_with_params(user_id=user_id)
+        email = user["email"]
+        name = user["name"]
+
+        reserved_account = create_reserved_account(user_id, name, email, bvn)
+
+        if not reserved_account:
+            raise ValidationError("unable to create account number for user")
+
+        new_bvn = update_wallet_bvn(bvn, user_id)
+
+        if not new_bvn:
+            raise ValidationError("unable to update user bvn")
+
+
+        account_number = reserved_account["accountNumber"]
+
+        account = set_account_number(account_number, user_id)
+
+        if not account:
+            raise ValidationError("unable to save account number to db")
+
+        return {
+            "success": True,
+            "message": "wallet activation successful",
+            "account_number": account_number
+        }, 201
+
+    except (ValidationError, UnauthorizedError, NotFoundError, ForbiddenError) as e:
+        raise e
+
+    except Exception as e:
+        logger.error(f"exception occurred in activate wallet: {e}", exc_info=True)
+        raise InternalServerError
 
 
 def transfer_between_wallet(amount, to_account, from_account, pin):
