@@ -2,4 +2,6 @@
 firebase.js
 fcm.json
 
+__pycache__
+
 .idea/

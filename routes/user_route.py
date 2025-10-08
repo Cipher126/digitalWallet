@@ -395,7 +395,7 @@ def delete_user(user_id):
 
 
 @user_bp.route('/logout', methods=['POST'])
-@token_required
+@token_required(role=['user', 'admin'])
 def logout_user(user_id):
     try:
         auth_header = request.headers.get("Authorization")
@@ -411,7 +411,8 @@ def logout_user(user_id):
 
         return jsonify(response), status
 
-    except (UnauthorizedError, InsufficientDataError) as e:
+    except (UnauthorizedError, InsufficientDataError, ForbiddenError, jwt.ExpiredSignatureError,
+            jwt.InvalidSignatureError) as e:
         raise e
 
     except Exception as e:

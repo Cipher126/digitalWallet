@@ -1,3 +1,4 @@
+import datetime
 import time
 
 from error_handling.errors import InternalServerError
@@ -27,8 +28,9 @@ def rate_limit(identifier, capacity, refill_rate):
         elapsed = now - last_ts
 
         tokens = min(capacity, tokens + elapsed * refill_rate)
+        exp = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=3)
 
-        r.set(key_timestamp, now)
+        r.setex(key_timestamp, exp, now)
 
         if tokens < 1:
             r.set(key_tokens, tokens)
@@ -42,3 +44,5 @@ def rate_limit(identifier, capacity, refill_rate):
     except Exception as e:
         logger.error(f"exception occurred in rate limit: {e}", exc_info=True)
         raise InternalServerError
+
+print(datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=3))
