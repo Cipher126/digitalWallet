@@ -359,7 +359,7 @@ def update(user_id, username):
 
 
 @user_bp.route('/enable-notification', methods=['PUT'])
-@token_required(role="user")
+@token_required(role=["user", "admin"])
 @rate_limiter(capacity=30, refill_rate=1)
 def notify(user_id):
     try:

@@ -1,5 +1,7 @@
 import jwt
 import datetime
+
+from error_handling.errors import ForbiddenError, ValidationError
 from utils.hashing import generate_id
 import os
 from dotenv import load_dotenv
@@ -38,12 +40,12 @@ def verify_token(token, refresh = False):
 
         token_type = payload.get("type")
         if refresh and token_type != "refresh":
-            raise Exception("Invalid token type, refresh token expected")
+            raise ValidationError("Invalid token type, refresh token expected")
         if not refresh and token_type != "access":
-            raise Exception("Invalid token type, access token expected")
+            raise ValidationError("Invalid token type, access token expected")
 
         return payload
     except jwt.ExpiredSignatureError:
-        raise Exception("Token has expired")
+        raise ForbiddenError("Expired or invalid token")
     except jwt.InvalidTokenError:
-        raise Exception("Invalid Token")
+        raise ForbiddenError("Expired or invalid token")

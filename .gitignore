@@ -1,7 +1,8 @@
 .env
 firebase.js
 fcm.json
+token.html
 
-__pycache__
+**/__pycache__/
 
 .idea/
