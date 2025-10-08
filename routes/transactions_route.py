@@ -12,7 +12,7 @@ txn_bp = Blueprint("transaction", __name__)
 
 @txn_bp.route('/transaction-history', methods=['GET'])
 @rate_limiter(capacity=30, refill_rate=1)
-@token_required
+@token_required(role=["user", "admin"])
 def history(user_id):
     try:
         limit = request.args.get("limit", type=int)
@@ -32,7 +32,7 @@ def history(user_id):
 
 @txn_bp.route('/view-single-transaction/<reference>', methods=['GET'])
 @rate_limiter(capacity=30, refill_rate=1)
-@token_required
+@token_required(role=["user", "admin"])
 def single_txn(user_id, reference):
     try:
         response, status = view_single_transaction(ref=reference)

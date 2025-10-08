@@ -36,7 +36,7 @@ def google_login():
 
     return redirect(google_auth_url)
 
-@user_bp.route("/auth/google/callback")
+@user_bp.route("/auth/google/callback", methods=['GET'])
 def google_callback():
     code = request.args.get("code")
 
@@ -68,7 +68,26 @@ def google_callback():
     oauth_id = user_data.get("sub")
 
     try:
+        ip_address = request.remote_addr
+        location = ""
         response, status = oauth_user_login(provider="google", full_name=name, oauth_id=oauth_id, email=email)
+
+        try:
+            res = requests.get(f"http://ip-api.com/json/{ip_address}", timeout=3)
+            res.raise_for_status()
+            location_info = res.json()
+
+            if location_info.get("status") == "success":
+
+                location = f"{location_info.get('city', 'Unknown')}, {location_info.get('country', 'Unknown')}"
+        except Exception as e:
+            logger.warning(f"Could not fetch location for {ip_address}: {e}")
+
+        if response.get("message") == "OAuth login successful":
+            sent = send_login_alert(email, location)
+
+            if not sent:
+                logger.warning(f"Unable to send login alert email to {email}")
 
         return jsonify(response), status
 
@@ -104,33 +123,34 @@ def login():
     email = data.get("email")
     password = data.get("password")
     ip_address = request.remote_addr
+    location = "Unknown"
 
     try:
-        res = requests.get(f"http://ip-api.com/json/{ip_address}")
-
+        res = requests.get(f"http://ip-api.com/json/{ip_address}", timeout=3)
+        res.raise_for_status()
         location_info = res.json()
 
-        location =f'{location_info["city"]}, {location_info["country"]}'
+        if location_info.get("status") == "success":
+            location = f"{location_info.get('city', 'Unknown')}, {location_info.get('country', 'Unknown')}"
     except Exception as e:
-        logger.warning(f"could not fetch location: {e}")
+        logger.warning(f"Could not fetch location for {ip_address}: {e}")
 
     try:
         if username:
-            email = search_user_with_params(username=username)["email"]
+            user = search_user_with_params(username=username)
+            if not user:
+                raise NotFoundError("User not found")
 
-            if not email:
-                raise NotFoundError("email not found ")
-
+            email = user.get("email")
             if not all([username, password]):
                 raise InsufficientDataError
 
             response, status = user_login_username(username, password)
 
-            if response["message"] == "login successful":
+            if response.get("message") == "login successful":
                 sent = send_login_alert(email, location)
-
                 if not sent:
-                    logger.warning(f"unable to send login alert: {sent}", exc_info=True)
+                    logger.warning(f"Unable to send login alert email to {email}")
 
             return jsonify(response), status
 
@@ -140,21 +160,20 @@ def login():
 
             response, status = user_login_email(email, password)
 
-            if response["message"] == "login successful":
+            if response.get("message") == "login successful":
                 sent = send_login_alert(email, location)
-
                 if not sent:
-                    logger.warn(f"unable to send login alert: {sent}", exc_info=True)
+                    logger.warning(f"Unable to send login alert email to {email}")
 
             return jsonify(response), status
 
-        raise ValidationError
+        raise ValidationError("Missing username or email")
 
     except (ValidationError, NotFoundError, LockoutError, InsufficientDataError) as e:
         raise e
 
     except Exception as e:
-        logger.error(f"exception occurred in user login: {e}", exc_info=True)
+        logger.error(f"Exception occurred in user login: {e}", exc_info=True)
         raise InternalServerError
 
 

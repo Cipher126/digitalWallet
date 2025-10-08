@@ -1,5 +1,6 @@
 from flask import Flask
 from error_handling.error_handler import handle_error
+from routes.transactions_route import txn_bp
 from routes.user_route import user_bp
 from routes.admin_route import admin_bp
 from routes.wallet_route import wallet_bp
@@ -15,6 +16,7 @@ handle_error(app)
 app.register_blueprint(user_bp, url_prefix='/api/user')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(wallet_bp, url_prefix='/api/wallet')
+app.register_blueprint(txn_bp, url_prefix='/api/transaction')
 app.register_blueprint(webhook_bp)
 
 load_dotenv()

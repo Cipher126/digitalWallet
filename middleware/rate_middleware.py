@@ -17,7 +17,7 @@ def rate_limiter(capacity=10, refill_rate=1):
 
     try:
 
-        def decorator(f):
+        def limiter(f):
             @wraps(f)
             def wrapper(*args, **kwargs):
                 identifier = request.remote_addr or request.remote_user
@@ -27,7 +27,7 @@ def rate_limiter(capacity=10, refill_rate=1):
 
                 return f(*args, **kwargs)
             return wrapper
-        return decorator
+        return limiter
 
     except LockoutError as e:
         raise e

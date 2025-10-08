@@ -1,21 +1,26 @@
 from functools import wraps
+
 from flask import request, jsonify
 
 from error_handling.errors import ForbiddenError, UnauthorizedError
-from services.auth_services import is_token_blacklisted, logger
+from services.auth_services import is_token_blacklisted
+from error_handling.error_handler import logger
 from utils.jwt_utils import verify_token
 
 def token_required(role=None):
-    def decorator(f):
+    def _decorator(f):
         @wraps(f)
-        def wrapper(*args, **kwargs):
-            token = None
+        def _wrapper(*args, **kwargs):
+            # token = None
 
-            if "Authorization" in request.headers:
-                header = request.headers["Authorization"]
+            # if "Authorization" in request.headers:
+            header = request.headers["Authorization"]
+            if not header:
+                raise UnauthorizedError
 
-                if header.startswith("Bearer "):
-                    token = header.split(" ")[1]
+            if not header.startswith("Bearer "):
+                raise UnauthorizedError("Bearer token required")
+            token = header.split(" ")[1]
 
             if not token:
                 raise UnauthorizedError("access token required")
@@ -34,7 +39,7 @@ def token_required(role=None):
                 if role is not None and user_role != role:
                     raise ForbiddenError
 
-                request.user = {"user_id": user_id, "role": user_role}
+                # request.user = {"user_id": user_id, "role": user_role}
 
             except Exception as e:
                 logger.error(f"exception occurred: {e}", exc_info=True)
@@ -42,7 +47,7 @@ def token_required(role=None):
                     "error": "something went wrong"
                 }), 500
 
-            return f(user_id=payload.get("user_id"), *args, **kwargs)
+            return f(user_id, *args, **kwargs)
 
-        return wrapper
-    return decorator
+        return _wrapper
+    return _decorator

@@ -1,4 +1,6 @@
 import datetime
+import json
+
 from database.connection import conn
 from error_handling.error_handler import logger
 from error_handling.errors import NotFoundError
@@ -14,7 +16,25 @@ def insert_audit_log(user_id, action, metadata=None):
                 cursor.execute("""
                     INSERT INTO audit_logs (log_id, user_id, action, metadata, created_at)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (log_id, user_id, action, metadata, datetime.datetime.now(datetime.timezone.utc)))
+                """, (log_id, user_id, action, json.dumps(metadata), datetime.datetime.now(datetime.timezone.utc)))
+
+        return True
+    except Exception as e:
+        logger.error(f"Failed to insert audit log: {e}", exc_info=True)
+        raise
+
+
+def insert_user_audit_log(cursor, user_id, action, metadata=None):
+    """Insert a new audit log entry."""
+    try:
+        log_id = generate_id(10)
+
+        cursor.execute("""
+                    INSERT INTO audit_logs (log_id, user_id, action, metadata, created_at)
+                    VALUES (%s, %s, %s, %s, %s)
+        """, (log_id, user_id, action, json.dumps(metadata), datetime.datetime.now(datetime.timezone.utc)))
+
+        return True
     except Exception as e:
         logger.error(f"Failed to insert audit log: {e}", exc_info=True)
         raise

@@ -1,12 +1,14 @@
+import json
+
 from error_handling.error_handler import logger
 from error_handling.errors import (
     InsufficientDataError, NotFoundError,
-    ValidationError, ConflictError, UnauthorizedError
+    ValidationError, ConflictError, UnauthorizedError, InternalServerError
 )
-from models.audit_logs_model import insert_audit_log
+from models.audit_logs_model import insert_audit_log, insert_user_audit_log
 from models.tokens_model import insert_refresh_token
 from utils.hashing import (
-    hash_password, generate_id, generate_account_number,
+    hash_password, generate_id,
     verify_password
 )
 from database.connection import conn
@@ -16,12 +18,11 @@ from utils.jwt_utils import create_access_token, create_refresh_token
 def _insert_wallet(cursor, user_id):
     """Create wallet automatically for each user."""
     wallet_id = generate_id(20)
-    account_number = generate_account_number()
     cursor.execute("""
-        INSERT INTO wallets (wallet_id, user_id, account_number)
-        VALUES (%s, %s, %s)
-    """, (wallet_id, user_id, account_number))
-    return wallet_id, account_number
+        INSERT INTO wallets (wallet_id, user_id)
+        VALUES (%s, %s)
+    """, (wallet_id, user_id))
+    return wallet_id
 
 
 def generate_tokens(user_id, role):
@@ -44,22 +45,25 @@ def create_user(email, username, full_name, phone=None, password=None,
                     "SELECT 1 FROM users WHERE email = %s OR username = %s",
                     (email, username)
                 )
-                if cursor.fetchone():
+
+                user = cursor.fetchone()
+                if user:
                     raise ConflictError("Email or username already exists")
 
                 user_role = role if role else ""
 
                 if password and phone:
-                    hashed_pw = hash_password(password)
+                    hashed_pw = str(hash_password(password))
+
                     cursor.execute("""
                         INSERT INTO users (user_id, username, full_name, email, phone, password, role)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         RETURNING role
                     """, (user_id, username, full_name, email, phone, hashed_pw, user_role))
 
                     saved_role = cursor.fetchone()[0]
 
-                    insert_audit_log(user_id, "USER_CREATED", {"method": "email"})
+                    insert_user_audit_log(cursor, user_id, "USER_CREATED", json.dumps({"method": "email"}))
 
                 elif oauth_provider and oauth_id and is_oauth_only:
                     cursor.execute("""
@@ -72,23 +76,26 @@ def create_user(email, username, full_name, phone=None, password=None,
 
                     saved_role = cursor.fetchone()[0]
 
-                    insert_audit_log(user_id, "USER_CREATED", {"method": "OAUTH"})
+                    insert_user_audit_log(cursor, user_id, "USER_CREATED", json.dumps({"method": "OAUTH"}))
 
                 else:
                     raise InsufficientDataError("Not enough signup data provided")
 
-                wallet_id, account_number = _insert_wallet(cursor, user_id)
-                access, refresh = generate_tokens(user_id, saved_role)
+                wallet_id = _insert_wallet(cursor, user_id)
+        access, refresh = generate_tokens(user_id, saved_role)
 
         return {
             "user_id": user_id,
             "wallet_id": wallet_id,
-            "account_number": account_number,
+            "account_number": "",
             "tokens": {
                 "refresh_token": refresh,
                 "access_token": access
             }
         }
+
+    except NotFoundError as e:
+        raise e
 
     except Exception as e:
         logger.error(f"Error creating user: {e}", exc_info=True)
@@ -119,7 +126,11 @@ def search_user_with_params(username=None, email=None, user_id=None):
                 "role": user[13],
                 "fcm_token": [15]
             }
+
         raise NotFoundError("User not found")
+
+    except NotFoundError as e:
+        raise e
 
     except Exception as e:
         logger.error(f"Error searching user: {e}", exc_info=True)
@@ -197,32 +208,20 @@ def get_user_by_oauth(provider, oauth_id):
         raise
 
 
-def oauth_login(provider, oauth_id, email, full_name):
-    """Login or create new OAuth user."""
+def oauth_login(provider, oauth_id):
+    """Fetch OAuth user if they exist."""
     try:
         user = get_user_by_oauth(provider, oauth_id)
-
-        if user and user["is_active"]:
-            access_token, refresh_token = generate_tokens(user["user_id"], user["role"])
-            return {"username": user["username"], "access_token": access_token, "refresh_token": refresh_token}
-
-        username = f"wallet_user:{generate_id(20, '_')}"
-        new_user = create_user(email, username, full_name,
-                               oauth_provider=provider, oauth_id=oauth_id,
-                               is_oauth_only=True)
-
-        access_token, refresh_token = generate_tokens(new_user["user_id"], "user")  # default role
-
-        return {
-            "username": username,
-            "user": new_user,
-            "access_token": access_token,
-            "refresh_token": refresh_token
-        }
-
+        if not user:
+            raise NotFoundError("OAuth user not found")
+        if not user["is_active"]:
+            raise ValidationError("User account is inactive")
+        return user
+    except NotFoundError:
+        raise
     except Exception as e:
         logger.error(f"Error in OAuth login: {e}", exc_info=True)
-        raise
+        raise InternalServerError("Failed to fetch OAuth user")
 
 
 def update_user_active_status(user_id, is_active: bool):

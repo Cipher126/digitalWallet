@@ -8,7 +8,7 @@ from utils.lockout import r
 def hash_password(password):
     salt = bcrypt.gensalt()
 
-    return bcrypt.hashpw(password.decode(), salt).decode()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode()
 
 
 def verify_password(password, hashed_password):

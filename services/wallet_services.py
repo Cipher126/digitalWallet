@@ -233,7 +233,7 @@ def deactivate_wallet(user_id):
         raise InternalServerError
 
 
-def activate_wallet(user_id):
+def freeze_wallet(user_id):
     try:
 
         set_state = update_wallet_status(user_id=user_id, status=True)

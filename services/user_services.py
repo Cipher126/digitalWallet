@@ -1,3 +1,5 @@
+import qrcode
+
 from error_handling.error_handler import logger
 from error_handling.errors import ConflictError, InsufficientDataError, InternalServerError, \
     ValidationError, NotFoundError, LockoutError, ForbiddenError, UnauthorizedError
@@ -5,7 +7,8 @@ from models.transactions_model import get_transaction_per_user
 from models.users_model import (create_user, get_user_by_oauth, oauth_login,
                                 authenticate_user_with_email, authenticate_user_with_username,
                                 search_user_with_params, verify_user, update_user_info, update_user_password,
-                                update_user_active_status, enable_2fa, delete_account, update_fcm_token)
+                                update_user_active_status, enable_2fa, delete_account, update_fcm_token,
+                                generate_tokens)
 from models.wallets_model import get_wallet_by_params
 
 from services.audit_services import log_action
@@ -23,7 +26,7 @@ def signup_normal_user(data):
     phone = data.get("phone")
     password = data.get("password")
     user_role = data.get("role")
-    role = user_role if user_role else ""
+    role = str(user_role) if user_role else ""
 
     try:
 
@@ -38,7 +41,6 @@ def signup_normal_user(data):
             pass
 
         new_user = create_user(email, username, full_name, phone, password, role=role)
-        log_action(username, "register_user", {"email":email})
 
         return {
             "message": "user created successfully",
@@ -53,9 +55,12 @@ def signup_normal_user(data):
         raise InternalServerError
 
 
-def oauth_user_login(provider, oauth_id, email, full_name=None, phone=None, otp=None):
+def oauth_user_login(provider, oauth_id, email, full_name=None, otp=None):
     try:
-        user = oauth_login(provider=provider, oauth_id=oauth_id, full_name=full_name, email=email)
+        try:
+            user = oauth_login(provider=provider, oauth_id=oauth_id)
+        except NotFoundError:
+            user = None
 
         if user:
             if user.get("two_fa_enabled"):
@@ -63,39 +68,43 @@ def oauth_user_login(provider, oauth_id, email, full_name=None, phone=None, otp=
                     raise ValidationError("2FA code required")
                 if not verify_totp(user["totp_secret"], otp):
                     register_failed_login(identifier=user["user_id"], scope="user")
-                    raise ValidationError("invalid 2FA code")
+                    raise ValidationError("Invalid 2FA code")
 
             clear_failed_attempts(identifier=user["user_id"], scope="user")
-            log_action(user_id=user["user_id"], action="oauth login", metadata={"provider":provider})
+            access, refresh = generate_tokens(user["user_id"], user["role"])
+            log_action(user_id=user["user_id"], action="oauth_login", metadata={"provider": provider})
+
             return {
                 "success": True,
-                "message": "user login by OAUTH",
-                "user":user
+                "message": "OAuth login successful",
+                "tokens": {"access": access, "refresh": refresh}
             }, 200
 
-        if email:
-            existing_user = search_user_with_params(email=email)
-            if existing_user:
-                raise ConflictError("User already exists with this email, please login normally")
-
         username = generate_username()
+        new_user = create_user(
+            email=email,
+            username=username,
+            full_name=full_name,
+            oauth_provider=provider,
+            oauth_id=oauth_id,
+            is_oauth_only=True
+        )
 
-        new = create_user(oauth_provider=provider, oauth_id=oauth_id, username=username, full_name=full_name, email=email, phone=phone)
-
-        log_action(new["user_id"], "oauth signup", {"provider": provider})
+        # access, refresh = generate_tokens(new_user["user_id"], "user")
+        log_action(new_user["user_id"], "oauth_signup", {"provider": provider})
 
         return {
             "success": True,
-            "message": "oauth signup successful",
-            "user": new,
+            "message": "OAuth signup successful",
+            # "tokens": {"access": access, "refresh": refresh},
+            "user": new_user,
         }, 201
 
     except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
         raise e
-
     except Exception as e:
         logger.error(f"Exception occurred in oauth user signup: {e}", exc_info=True)
-        raise InternalServerError
+        raise InternalServerError("Something went wrong")
 
 
 def user_login_email(email, password):
@@ -197,10 +206,11 @@ def user_dashboard(user_id):
         if not wallet:
             raise NotFoundError("wallet not found")
 
-        history = get_transaction_per_user(user_id=user_id, limit=0, offset=0)
+        try:
+            history = get_transaction_per_user(user_id=user_id, limit=0, offset=0)
 
-        if not history:
-            raise NotFoundError("no transaction found")
+        except NotFoundError:
+            history = []
 
         details = {
             "name": user["name"],

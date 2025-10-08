@@ -49,7 +49,7 @@ def get_auth_token():
         token = data["responseBody"]["accessToken"]
         exp = data["responseBody"]["expiresIn"]
 
-        r.set("monnify_access_token", token, ttl=exp - 60)
+        r.set("monnify_access_token", token, keepttl=exp - 60)
 
         return token
 
@@ -71,7 +71,8 @@ def create_reserved_account(user_id, account_name, email, bvn):
             "customerEmail": email,
             "bvn": bvn,
             "contractCode": MONNIFY_CONTRACT_CODE,
-            "currencyCode": "NGN"
+            "currencyCode": "NGN",
+            "getAllAvailableBanks": True
         }
 
         url = f"{MONNIFY_BASE_URL}/api/v2/bank-transfer/reserved-accounts"
@@ -83,8 +84,14 @@ def create_reserved_account(user_id, account_name, email, bvn):
         res = requests.post(url, json=payload, headers=headers)
         res.raise_for_status()
 
+        if res.status_code != 200:
+            print("Monnify Error Response:", res.text)
+
         data = res.json()
-        return data["responseBody"]["accounts"]
+        response_body = data["responseBody"]
+        if isinstance(response_body, list):
+            response_body = response_body[0]
+        return response_body
 
     except Exception as e:
         logger.error(f"Error creating reserved account: {e}", exc_info=True)

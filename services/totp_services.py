@@ -15,7 +15,8 @@ def verify_totp_service(data):
         if not all([identifier, otp]):
             raise InsufficientDataError("Please provide identifier and otp code")
 
-        user = search_user_with_params(email=identifier) or search_user_with_params(username=identifier)
+        user = search_user_with_params(username=identifier)
+        # print(user)
 
         if not user:
             raise NotFoundError("User not found")
@@ -23,7 +24,7 @@ def verify_totp_service(data):
         if is_user_locked_out(identifier=user["user_id"], scope="user"):
             raise LockoutError("Account locked due to too many failed attempts, try later")
 
-        if not verify_totp(user["totp_secret"], otp):
+        if not verify_totp(user["otp_secret"], otp):
             register_failed_login(identifier=user["user_id"], scope="user")
             log_action(user_id=user["user_id"], action="failed 2FA attempt", metadata={"identifier": identifier})
             raise ValidationError("Invalid 2FA code")

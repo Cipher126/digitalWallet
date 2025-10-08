@@ -7,7 +7,7 @@ from middleware.auth_middleware import token_required
 from middleware.rate_middleware import rate_limiter
 from services.audit_services import view_user_log_history, view_all_log_history
 from services.user_services import disable_user, enable_user
-from services.wallet_services import deactivate_wallet, activate_wallet
+from services.wallet_services import deactivate_wallet, activate_wallet, freeze_wallet
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -65,9 +65,9 @@ def freeze(user_id, identifier):
 @admin_bp.route('/unfreeze-wallet/<identifier>', methods=['PUT'])
 @rate_limiter(capacity=10, refill_rate=0.5)
 @token_required(role="user")
-def freeze(user_id, identifier):
+def un_freeze(user_id, identifier):
     try:
-        response, status =  activate_wallet(identifier)
+        response, status =  freeze_wallet(identifier)
 
         return jsonify(response), status
 
