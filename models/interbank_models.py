@@ -53,10 +53,13 @@ def update_interbank_status(transfer_id, mon_ref, status):
                     RETURNING user_id
                 """, (mon_ref, status, transfer_id))
 
-                user_id = cursor.fetchone()[0]
+                row = cursor.fetchone()
 
-                if not user_id:
-                    raise NotFoundError("Transfer not found")
+                if not row:
+                    logger.warning(f"No interbank transfer found for transfer_id={transfer_id}")
+                    raise NotFoundError("Transfer record not found")
+
+                user_id = row[0]
 
         insert_audit_log(user_id=user_id, action="Interbank transaction update", metadata={
             "status": status,

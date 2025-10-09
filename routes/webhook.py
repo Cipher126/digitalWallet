@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from flask import Blueprint, request, jsonify
 from error_handling.error_handler import logger
 from error_handling.errors import ValidationError, UnauthorizedError, NotFoundError, InternalServerError
@@ -9,11 +10,13 @@ import hmac
 import hashlib
 import json
 
+load_dotenv()
+
 from services.monnify_services import process_incoming_transfer
 
 webhook_bp = Blueprint("webhook_bp", __name__)
 
-MONNIFY_SECRET_KEY = os.getenv("MONNIFY_SECRET_KEY")
+MONNIFY_SECRET_KEY = os.getenv("MONNIFY_SECRET")
 
 
 @webhook_bp.route("/monnify/webhook", methods=["POST"])
@@ -22,6 +25,8 @@ def monnify_webhook():
         payload = request.get_data(as_text=True)
         headers = request.headers
         signature = headers.get("monnify-signature")
+
+        # logger.warning(f"RAW PAYLOAD RECEIVED BY FLASK: {payload}")
 
         if not signature:
             raise ValidationError("Missing Monnify signature header")
@@ -34,7 +39,7 @@ def monnify_webhook():
         ).hexdigest()
 
         if computed_hash != signature:
-            logger.warning("Invalid Monnify webhook signature detected")
+            # logger.warning(f"DEBUG SIGNATURES -> computed: {computed_hash}, received: {signature}")
             raise UnauthorizedError("Invalid Monnify signature")
 
         data = json.loads(payload)

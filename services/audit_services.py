@@ -30,7 +30,7 @@ def view_user_log_history(username, limit=None):
             "success": True,
             "message": "successful, logs retrieved",
             "logs_history": history
-        }
+        }, 200
 
     except (NotFoundError, ForbiddenError, UnauthorizedError, ValidationError) as e:
         raise e
@@ -51,7 +51,7 @@ def view_all_log_history(limit=None):
             "success": True,
             "message": "successful, logs retrieved",
             "logs_history": history
-        }
+        }, 200
 
     except (NotFoundError, ForbiddenError, UnauthorizedError, ValidationError) as e:
         raise e

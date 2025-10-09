@@ -1,5 +1,6 @@
 import datetime
 import json
+from decimal import Decimal
 
 from database.connection import conn
 from error_handling.error_handler import logger
@@ -10,6 +11,7 @@ from utils.hashing import generate_id
 def insert_audit_log(user_id, action, metadata=None):
     """Insert a new audit log entry."""
     try:
+        metadata = {k: float(v) if isinstance(v, Decimal) else v for k, v in metadata.items()}
         log_id = generate_id(10)
         with conn:
             with conn.cursor() as cursor:
@@ -28,6 +30,7 @@ def insert_user_audit_log(cursor, user_id, action, metadata=None):
     """Insert a new audit log entry."""
     try:
         log_id = generate_id(10)
+        metadata = {k: float(v) if isinstance(v, Decimal) else v for k, v in metadata.items()}
 
         cursor.execute("""
                     INSERT INTO audit_logs (log_id, user_id, action, metadata, created_at)

@@ -108,11 +108,12 @@ def process_outgoing_transfer(account, amount, destination_bank_code, destinatio
         if not wallet:
             raise NotFoundError("sender account does not exist")
 
-        if wallet["balance"] < amount:
-            raise InsufficientFundsError(details={"available": wallet["balance"], "required": amount})
+        if float(wallet["balance"]) < float(amount):
+            raise InsufficientFundsError(details={"available": float(wallet["balance"]), "required": float(amount)})
 
 
         token = get_auth_token()
+        logger.warning(token)
         reference = generate_reference()
 
         payload = {
@@ -135,8 +136,9 @@ def process_outgoing_transfer(account, amount, destination_bank_code, destinatio
         res.raise_for_status()
 
         data = res.json()
+        logger.warn(f"data: {data}")
 
-        if data["requestSuccessful"]:
+        if data["success"]:
             update_wallet_balance_debit(amount, user_id=wallet["user_id"])
 
         insert_interbank_transfer(
@@ -181,7 +183,7 @@ def process_outgoing_transfer(account, amount, destination_bank_code, destinatio
         )
 
         send_txn_push(wallet["user_id"], "credit", amount, wallet["balance"] + amount)
-        return data["responseBody"]
+        return data["responseBody"], 200
 
     except (InsufficientFundsError, NotFoundError) as e:
         raise e

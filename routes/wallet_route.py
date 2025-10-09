@@ -80,11 +80,11 @@ def change(user_id):
 
 @wallet_bp.route('/transfer/internal', methods=['POST'])
 @rate_limiter(capacity=5, refill_rate=0.1)
-@token_required(role="user")
+@token_required(role=["user", "admin"])
 def transfer(user_id):
     try:
         data = request.get_json()
-        amount = data.get("amount")
+        amount = float(data.get("amount"))
         to_account = data.get("to_account")
         from_account = data.get("from_account")
         pin = data.get("pin")
@@ -104,7 +104,7 @@ def transfer(user_id):
 
 @wallet_bp.route('/transfer/external', methods=['POST'])
 @rate_limiter(capacity=5, refill_rate=0.1)
-@token_required(role="user")
+@token_required(role=["user", "admin"])
 def external(user_id):
     try:
         data = request.get_json()

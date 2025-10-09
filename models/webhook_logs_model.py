@@ -1,4 +1,7 @@
 import datetime
+import json
+from decimal import Decimal
+
 from database.connection import conn
 from error_handling.error_handler import logger
 from utils.hashing import generate_id
@@ -7,13 +10,14 @@ from utils.hashing import generate_id
 def insert_webhook_log(event_type, payload, status="pending"):
     """Insert a new webhook log entry."""
     try:
+        payload = {k: str(v) if isinstance(v, Decimal) else v for k, v in payload.items()}
         webhook_id = generate_id(10)
         with conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     INSERT INTO webhook_logs (webhook_id, event_type, payload, status, attempts, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s)
-                """, (webhook_id, event_type, payload, status, 0, datetime.datetime.now(datetime.timezone.utc)))
+                """, (webhook_id, event_type, json.dumps(payload), status, 0, datetime.datetime.now(datetime.timezone.utc)))
     except Exception as e:
         logger.error(f"Failed to insert webhook log: {e}", exc_info=True)
         raise

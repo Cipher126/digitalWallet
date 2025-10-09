@@ -47,7 +47,7 @@ def activate(user_id, identifier):
 
 @admin_bp.route('/freeze-wallet/<identifier>', methods=['PUT'])
 @rate_limiter(capacity=10, refill_rate=0.5)
-@token_required(role="user")
+@token_required(role="admin")
 def freeze(user_id, identifier):
     try:
         response, status = deactivate_wallet(identifier)
@@ -64,7 +64,7 @@ def freeze(user_id, identifier):
 
 @admin_bp.route('/unfreeze-wallet/<identifier>', methods=['PUT'])
 @rate_limiter(capacity=10, refill_rate=0.5)
-@token_required(role="user")
+@token_required(role="admin")
 def un_freeze(user_id, identifier):
     try:
         response, status =  freeze_wallet(identifier)

@@ -48,7 +48,7 @@ def token_required(role: str | List = None):
 
             except Exception as ex:
                 logger.error(f"exception occurred in token verification: {ex}", exc_info=True)
-                raise UnauthorizedError("invalid or malformed token")
+                raise ex
 
         return _wrapper
     return _decorator

@@ -56,15 +56,15 @@ def activate_wallet(user_id, bvn):
         raise InternalServerError
 
 
-def transfer_between_wallet(amount, to_account, from_account, pin):
+def transfer_between_wallet(amount: float, to_account, from_account, pin):
     txn_base = generate_id(15)
     debit_txn_id = f"{txn_base}D"
     credit_txn_id = f"{txn_base}C"
 
-    try:
-        from_wallet = get_wallet_by_params(account_number=from_account)
-        to_wallet = get_wallet_by_params(account_number=to_account)
+    from_wallet = get_wallet_by_params(account_number=from_account)
+    to_wallet = get_wallet_by_params(account_number=to_account)
 
+    try:
         if not to_wallet:
             raise NotFoundError("receiver account number not found")
 
@@ -78,21 +78,21 @@ def transfer_between_wallet(amount, to_account, from_account, pin):
             register_failed_login(scope="wallet", identifier=from_wallet["wallet_id"])
             raise ValidationError("Incorrect PIN try again, note you will be lockout after 3 attempts")
 
-        if from_wallet["balance"] < amount:
+        if float(from_wallet["balance"]) < float(amount):
             raise InsufficientFundsError(details={"available": from_wallet["balance"], "required": amount})
 
         credit = update_wallet_balance_deposit(amount, to_wallet["user_id"])
         debit = update_wallet_balance_debit(amount, from_wallet["user_id"])
-        new_balance = from_wallet["balance"] - amount
+        new_balance = float(from_wallet["balance"]) - float(amount)
 
         create_transaction(
             txn_id = debit_txn_id,
             wallet_id=from_wallet["wallet_id"],
             user_id=from_wallet["user_id"],
             txn_type="debit",
-            amount=amount,
-            from_account=from_wallet,
-            to_account=to_wallet
+            amount=float(amount),
+            from_account=from_wallet["account_number"],
+            to_account=to_wallet["account_number"]
         )
 
         create_transaction(
@@ -101,8 +101,8 @@ def transfer_between_wallet(amount, to_account, from_account, pin):
             user_id=to_wallet["user_id"],
             txn_type="credit",
             amount=amount,
-            from_account=from_wallet,
-            to_account=to_wallet
+            from_account=from_wallet["account_number"],
+            to_account=to_wallet["account_number"]
         )
 
         if credit and not debit:
@@ -153,6 +153,8 @@ def transfer_between_wallet(amount, to_account, from_account, pin):
         raise e
 
     except Exception as e:
+        update_wallet_balance_deposit(amount, from_wallet["user_id"])
+        update_wallet_balance_debit(amount, to_wallet["user_id"])
         update_transaction_status("failed", debit_txn_id)
         update_transaction_status("failed", credit_txn_id)
         logger.error(f"exception occurred in transfer between wallet: {e}", exc_info=True)
