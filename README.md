@@ -86,7 +86,6 @@ wallet_app/
 ├── models/               # Database models
 ├── middleware/          # Auth & rate limiting
 ├── error_handling/      # Custom error handlers
-├── tests/              # Unit & integration tests
 ├── .env               # Environment configuration
 ├── requirements.txt   # Project dependencies
 └── main.py           # Application entry point
