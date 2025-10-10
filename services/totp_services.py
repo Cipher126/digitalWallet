@@ -16,7 +16,6 @@ def verify_totp_service(data):
             raise InsufficientDataError("Please provide identifier and otp code")
 
         user = search_user_with_params(username=identifier)
-        # print(user)
 
         if not user:
             raise NotFoundError("User not found")

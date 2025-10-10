@@ -43,11 +43,12 @@ def signup_normal_user(data):
         new_user = create_user(email, username, full_name, phone, password, role=role)
 
         return {
+            "success": True,
             "message": "user created successfully",
             "user_details": new_user
         }, 201
 
-    except (ValidationError, NotFoundError, ConflictError, LockoutError) as e:
+    except (ValidationError, NotFoundError, ConflictError, LockoutError, InsufficientDataError) as e:
         raise e
 
     except Exception as e:

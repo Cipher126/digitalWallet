@@ -23,7 +23,6 @@ def create_transaction(wallet_id, user_id, txn_type, amount, txn_id=None,
             "receiver_account": to_account
         }
 
-        # Convert Decimal to float if present
         metadata = {k: str(v) if isinstance(v, Decimal) else v for k, v in metadata.items()}
 
         with conn:

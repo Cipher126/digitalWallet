@@ -6,7 +6,7 @@ from error_handling.errors import LockoutError, InternalServerError
 from utils.rate_limiter import rate_limit
 
 
-def rate_limiter(capacity=10, refill_rate=1):
+def rate_limiter(capacity=10, refill_rate=1.0):
     """
     Decorator for per_route rate limiting.
 

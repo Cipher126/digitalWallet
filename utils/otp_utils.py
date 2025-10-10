@@ -43,7 +43,3 @@ def verify_otp(email, user_otp, signature):
         logger.error(f"exception occurred: {e}", exc_info=True)
         return False
 
-# otp = generate_otp("email")
-# print(otp)
-verified = verify_otp("email", "776296", 'email:1758040036:776296:5J7VECDlmkm1XOgQQG_dryU1vZWQwFnww4ffa8xuXwA=')
-print(verified)

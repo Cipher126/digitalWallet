@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flasgger import swag_from
 
 from error_handling.error_handler import logger
 from error_handling.errors import InsufficientDataError, ValidationError, NotFoundError, InternalServerError, \
@@ -14,6 +15,40 @@ wallet_bp = Blueprint("wallet", __name__)
 @wallet_bp.route('/set-pin', methods=['POST'])
 @rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role="user")
+@swag_from({
+    'tags': ['Wallet Management'],
+    'summary': 'Set Wallet PIN',
+    'description': 'Set a new PIN for the wallet',
+    'security': [{'BearerAuth': []}],
+    'parameters': [{
+        'name': 'body',
+        'in': 'body',
+        'required': True,
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'pin': {'type': 'string', 'example': '1234'}
+            },
+            'required': ['pin']
+        }
+    }],
+    'responses': {
+        200: {
+            'description': 'PIN set successfully',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'success': True,
+                        'message': 'Wallet PIN set successfully'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Invalid PIN format'},
+        401: {'description': 'Unauthorized'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def set_pin(user_id):
     try:
         data = request.get_json()
@@ -37,6 +72,40 @@ def set_pin(user_id):
 @wallet_bp.route('/activate', methods=['POST'])
 @rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role="user")
+@swag_from({
+    'tags': ['Wallet Management'],
+    'summary': 'Activate Wallet',
+    'description': 'Activate wallet using BVN verification',
+    'security': [{'BearerAuth': []}],
+    'parameters': [{
+        'name': 'body',
+        'in': 'body',
+        'required': True,
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'bvn': {'type': 'string', 'example': '22222222222'}
+            },
+            'required': ['bvn']
+        }
+    }],
+    'responses': {
+        200: {
+            'description': 'Wallet activated successfully',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'success': True,
+                        'message': 'Wallet activated successfully'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Invalid BVN'},
+        401: {'description': 'Unauthorized'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def activate(user_id):
     try:
         data = request.get_json()
@@ -57,6 +126,41 @@ def activate(user_id):
 @wallet_bp.route('/change-pin', methods=['PUT'])
 @rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role="user")
+@swag_from({
+    'tags': ['Wallet Management'],
+    'summary': 'Change Wallet PIN',
+    'description': 'Change existing wallet PIN to a new PIN',
+    'security': [{'BearerAuth': []}],
+    'parameters': [{
+        'name': 'body',
+        'in': 'body',
+        'required': True,
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'old_pin': {'type': 'string', 'example': '1234'},
+                'pin': {'type': 'string', 'example': '5678'}
+            },
+            'required': ['old_pin', 'pin']
+        }
+    }],
+    'responses': {
+        200: {
+            'description': 'PIN changed successfully',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'success': True,
+                        'message': 'Wallet PIN changed successfully'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Invalid PIN format'},
+        401: {'description': 'Unauthorized or incorrect old PIN'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def change(user_id):
     try:
         data = request.get_json()
@@ -81,6 +185,45 @@ def change(user_id):
 @wallet_bp.route('/transfer/internal', methods=['POST'])
 @rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role=["user", "admin"])
+@swag_from({
+    'tags': ['Wallet Transactions'],
+    'summary': 'Internal Wallet Transfer',
+    'description': 'Transfer funds between internal wallets',
+    'security': [{'BearerAuth': []}],
+    'parameters': [{
+        'name': 'body',
+        'in': 'body',
+        'required': True,
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'amount': {'type': 'number', 'example': 1000.00},
+                'to_account': {'type': 'string', 'example': '1234567890'},
+                'from_account': {'type': 'string', 'example': '0987654321'},
+                'pin': {'type': 'string', 'example': '1234'}
+            },
+            'required': ['amount', 'to_account', 'from_account', 'pin']
+        }
+    }],
+    'responses': {
+        200: {
+            'description': 'Transfer successful',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'success': True,
+                        'message': 'Transfer successful',
+                        'reference': 'TRF123456'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Invalid transfer details'},
+        401: {'description': 'Unauthorized or incorrect PIN'},
+        402: {'description': 'Insufficient funds'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def transfer(user_id):
     try:
         data = request.get_json()
@@ -105,6 +248,46 @@ def transfer(user_id):
 @wallet_bp.route('/transfer/external', methods=['POST'])
 @rate_limiter(capacity=5, refill_rate=0.1)
 @token_required(role=["user", "admin"])
+@swag_from({
+    'tags': ['Wallet Transactions'],
+    'summary': 'External Bank Transfer',
+    'description': 'Transfer funds to external bank accounts',
+    'security': [{'BearerAuth': []}],
+    'parameters': [{
+        'name': 'body',
+        'in': 'body',
+        'required': True,
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'amount': {'type': 'number', 'example': 1000.00},
+                'bank_code': {'type': 'string', 'example': '058'},
+                'destination_account': {'type': 'string', 'example': '0123456789'},
+                'narration': {'type': 'string', 'example': 'Payment for services'}
+            },
+            'required': ['amount', 'bank_code', 'destination_account']
+        }
+    }],
+    'responses': {
+        200: {
+            'description': 'Transfer initiated successfully',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'success': True,
+                        'message': 'Transfer initiated',
+                        'reference': 'EXT123456'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Invalid transfer details'},
+        401: {'description': 'Unauthorized'},
+        402: {'description': 'Insufficient funds'},
+        404: {'description': 'Wallet not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def external(user_id):
     try:
         data = request.get_json()

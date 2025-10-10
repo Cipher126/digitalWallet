@@ -2,6 +2,7 @@
 firebase.js
 fcm.json
 token.html
+.venv
 
 **/__pycache__/
 

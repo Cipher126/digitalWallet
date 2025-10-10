@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 from flask import Blueprint, request, jsonify
+from flasgger import swag_from
 from error_handling.error_handler import logger
 from error_handling.errors import ValidationError, UnauthorizedError, NotFoundError, InternalServerError
 from models.interbank_models import update_interbank_status, get_interbank_by_transfer_id
@@ -20,18 +21,72 @@ MONNIFY_SECRET_KEY = os.getenv("MONNIFY_SECRET")
 
 
 @webhook_bp.route("/monnify/webhook", methods=["POST"])
+@swag_from({
+    'tags': ['Webhooks'],
+    'summary': 'Monnify Main Webhook Handler',
+    'description': 'Handles various webhook events from Monnify payment gateway including disbursements and transactions',
+    'parameters': [
+        {
+            'name': 'monnify-signature',
+            'in': 'header',
+            'required': True,
+            'type': 'string',
+            'description': 'HMAC SHA512 signature for payload verification'
+        },
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'eventType': {
+                        'type': 'string',
+                        'enum': ['DISBURSEMENT_TRANSFER', 'SUCCESSFUL_TRANSACTION', 'FAILED'],
+                        'example': 'SUCCESSFUL_TRANSACTION'
+                    },
+                    'eventData': {
+                        'type': 'object',
+                        'properties': {
+                            'reference': {'type': 'string'},
+                            'transactionStatus': {'type': 'string'},
+                            'productReference': {'type': 'string'},
+                            'accountReference': {'type': 'string'},
+                            'amountPaid': {'type': 'number'}
+                        }
+                    }
+                },
+                'required': ['eventType', 'eventData']
+            }
+        }
+    ],
+    'responses': {
+        200: {
+            'description': 'Webhook processed successfully',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'status': 'success'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Validation error - Invalid payload format'},
+        401: {'description': 'Unauthorized - Invalid signature'},
+        404: {'description': 'Resource not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def monnify_webhook():
     try:
         payload = request.get_data(as_text=True)
         headers = request.headers
         signature = headers.get("monnify-signature")
 
-        # logger.warning(f"RAW PAYLOAD RECEIVED BY FLASK: {payload}")
 
         if not signature:
             raise ValidationError("Missing Monnify signature header")
 
-        #Step 1: Verify webhook signature
         computed_hash = hmac.new(
             MONNIFY_SECRET_KEY.encode(),
             msg=payload.encode(),
@@ -39,17 +94,15 @@ def monnify_webhook():
         ).hexdigest()
 
         if computed_hash != signature:
-            # logger.warning(f"DEBUG SIGNATURES -> computed: {computed_hash}, received: {signature}")
+            logger.warning(f"DEBUG SIGNATURES -> computed: {computed_hash}, received: {signature}")
             raise UnauthorizedError("Invalid Monnify signature")
 
         data = json.loads(payload)
         event_type = data.get("eventType")
         event_data = data.get("eventData")
 
-        #Step 2: Log webhook
         insert_webhook_log(event_type, event_data)
 
-        #Step 3: Handle interbank transaction callback
         if event_type == "DISBURSEMENT_TRANSFER":
             mon_ref = event_data.get("reference")
             status = event_data.get("transactionStatus")
@@ -57,7 +110,6 @@ def monnify_webhook():
 
             update_interbank_status(transfer_id, mon_ref, status)
 
-        #Step 4: Handle wallet funding or reserved account credit
         elif event_type == "SUCCESSFUL_TRANSACTION":
             account_ref = event_data.get("accountReference")
             amount = event_data.get("amountPaid")
@@ -80,6 +132,64 @@ def monnify_webhook():
 
 
 @webhook_bp.route("/monnify/incoming", methods=["POST"])
+@swag_from({
+    'tags': ['Webhooks'],
+    'summary': 'Monnify Incoming Transfer Webhook',
+    'description': 'Handles incoming transfer notifications from Monnify payment gateway',
+    'parameters': [
+        {
+            'name': 'monnify-signature',
+            'in': 'header',
+            'required': True,
+            'type': 'string',
+            'description': 'HMAC SHA512 signature for payload verification'
+        },
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'eventType': {
+                        'type': 'string',
+                        'enum': ['SUCCESSFUL_TRANSACTION'],
+                        'example': 'SUCCESSFUL_TRANSACTION'
+                    },
+                    'eventData': {
+                        'type': 'object',
+                        'properties': {
+                            'transactionReference': {'type': 'string'},
+                            'paymentReference': {'type': 'string'},
+                            'amountPaid': {'type': 'number'},
+                            'destinationAccountNumber': {'type': 'string'},
+                            'destinationAccountName': {'type': 'string'},
+                            'destinationBankName': {'type': 'string'}
+                        }
+                    }
+                },
+                'required': ['eventType', 'eventData']
+            }
+        }
+    ],
+    'responses': {
+        200: {
+            'description': 'Webhook processed successfully',
+            'content': {
+                'application/json': {
+                    'example': {
+                        'success': True,
+                        'message': 'processed'
+                    }
+                }
+            }
+        },
+        400: {'description': 'Validation error - Invalid payload format'},
+        401: {'description': 'Unauthorized - Invalid signature'},
+        404: {'description': 'Resource not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def monnify_incoming_webhook():
     try:
         data = request.get_json()
