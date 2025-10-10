@@ -8,6 +8,7 @@
 A robust and secure digital wallet system built with Flask, providing comprehensive financial services including wallet management, secure transactions, and administrative controls.
 
 ## 📑 Table of Contents
+
 - [Features](#features)
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
@@ -25,6 +26,7 @@ A robust and secure digital wallet system built with Flask, providing comprehens
 ## ✨ Features <a name="features"></a>
 
 ### Authentication & Security
+
 - Multi-factor authentication (2FA)
 - JWT-based authentication
 - Google OAuth2.0 integration
@@ -33,6 +35,7 @@ A robust and secure digital wallet system built with Flask, providing comprehens
 - Role-based access control
 
 ### Wallet Management
+
 - Digital wallet creation and activation
 - Secure PIN management
 - Internal wallet-to-wallet transfers
@@ -41,6 +44,7 @@ A robust and secure digital wallet system built with Flask, providing comprehens
 - Transaction history tracking
 
 ### Administrative Controls
+
 - User account management
 - Wallet freeze/unfreeze capabilities
 - Activity monitoring
@@ -48,6 +52,7 @@ A robust and secure digital wallet system built with Flask, providing comprehens
 - User verification management
 
 ### Notifications
+
 - Firebase Cloud Messaging integration
 - Email notifications
 - Login alerts
@@ -56,6 +61,7 @@ A robust and secure digital wallet system built with Flask, providing comprehens
 ## 🛠 Technology Stack <a name="technology-stack"></a>
 
 ### Backend
+
 - **Framework**: Flask (Python)
 - **Database**: PostgreSQL
 - **Authentication**: JWT, OAuth2.0
@@ -64,6 +70,7 @@ A robust and secure digital wallet system built with Flask, providing comprehens
 - **Push Notifications**: Firebase Cloud Messaging
 
 ### Development Tools
+
 - **Version Control**: Git
 - **API Testing**: Postman/Swagger UI
 - **Logging**: Custom implementation
@@ -103,23 +110,27 @@ wallet_app/
 ### Installation <a name="installation"></a>
 
 1. Clone the repository
+
 ```bash
 git clone https://github.com/cipher126/digitalWallet.git
 cd wallet_app
 ```
 
 2. Create and activate virtual environment
+
 ```bash
 python -m venv venv
 .\venv\Scripts\activate
 ```
 
 3. Install dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 4. Set up environment variables
+
 ```bash
 cp .env.example .env
 GOOGLE_CLIENT_ID=your_google_client_id
@@ -151,6 +162,7 @@ EMAIL_PASSWORD=email_password
 ```
 
 5. Run the application
+
 ```bash
 python main.py
 ```
@@ -194,7 +206,6 @@ Comprehensive API documentation is available via Swagger UI at `/docs` endpoint 
 - Secure headers implementation
 - Transaction signing
 - Activity audit logging
-
 
 ## 📦 Deployment <a name="deployment"></a>
 
